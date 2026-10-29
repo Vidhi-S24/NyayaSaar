@@ -1,0 +1,72 @@
+# Dependency directories
+node_modules/
+.pnpm-store/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Next.js
+.next/
+out/
+.vercel/
+.turbo/
+
+# Python
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+# Always commit .env.example — it contains only placeholder values
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+playwright-report/
+test-results/
+
+# Database
+*.sqlite
+*.sqlite3
+
+# Storage / uploads (dev artefacts)
+uploads/
+storage/
+
+# Alembic
+apps/api/alembic/versions/*.pyc
+

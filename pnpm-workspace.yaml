@@ -1,0 +1,11 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Explicitly approve build scripts for native modules required by Next.js and Vite
+# (pnpm 12 security model: packages must be listed here to run postinstall scripts)
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+

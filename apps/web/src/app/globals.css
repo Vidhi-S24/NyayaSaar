@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* NyayaSaar design tokens — light mode */
+    --background: 40 33% 98%;        /* warm off-white / parchment */
+    --foreground: 228 49% 20%;       /* deep ink / navy */
+
+    --card: 0 0% 100%;
+    --card-foreground: 228 49% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 228 49% 20%;
+
+    --primary: 228 49% 22%;          /* deep ink navy */
+    --primary-foreground: 40 33% 98%;
+
+    --secondary: 40 20% 93%;         /* parchment secondary */
+    --secondary-foreground: 228 49% 22%;
+
+    --muted: 40 20% 93%;
+    --muted-foreground: 228 20% 50%;
+
+    --accent: 180 70% 37%;           /* teal accent */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 228 20% 88%;
+    --input: 228 20% 88%;
+    --ring: 180 70% 37%;
+
+    --radius: 0.375rem;
+  }
+
+  .dark {
+    --background: 228 49% 10%;
+    --foreground: 40 20% 95%;
+
+    --card: 228 49% 13%;
+    --card-foreground: 40 20% 95%;
+
+    --popover: 228 49% 13%;
+    --popover-foreground: 40 20% 95%;
+
+    --primary: 40 20% 95%;
+    --primary-foreground: 228 49% 10%;
+
+    --secondary: 228 30% 18%;
+    --secondary-foreground: 40 20% 95%;
+
+    --muted: 228 30% 18%;
+    --muted-foreground: 228 20% 60%;
+
+    --accent: 180 60% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 42%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 228 30% 22%;
+    --input: 228 30% 22%;
+    --ring: 180 60% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Smooth focus rings for accessibility */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
