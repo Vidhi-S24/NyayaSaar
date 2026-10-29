@@ -166,3 +166,4 @@ See [decisions.md](decisions.md) for the rationale behind technology choices.
 | 5 | Agentic workflows | LangGraph nodes, Gemini integration, tools |
 | 6 | Legal analysis | All five intelligence modules, retrieval |
 | 7 | Evaluation + deploy | LangSmith, RAGAS, Render/Vercel config, CI |
+

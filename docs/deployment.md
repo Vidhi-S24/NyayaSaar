@@ -179,3 +179,4 @@ pip install -r requirements.txt && alembic upgrade head
 - [ ] Case-level authorisation enabled (Stage 3)
 - [ ] Rate limiting enabled (Stage 7)
 - [ ] HTTPS enforced on all services (automatic on Render/Vercel)
+

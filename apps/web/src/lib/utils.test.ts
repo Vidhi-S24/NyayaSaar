@@ -32,3 +32,4 @@ describe("capitalise", () => {
     expect(capitalise("")).toBe("");
   });
 });
+

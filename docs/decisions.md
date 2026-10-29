@@ -107,3 +107,4 @@
 **Date:** Stage 1
 **Decision:** Every API response is wrapped in `{ success, data, error, meta }`.
 **Rationale:** Provides a consistent, machine-readable structure for clients regardless of HTTP status codes. Clients can always check `response.success` without parsing error formats differently per endpoint. Matches the TypeScript type in `packages/shared`.
+

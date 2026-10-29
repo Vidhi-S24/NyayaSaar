@@ -11,3 +11,4 @@ export async function fetchHealth(): Promise<ApiResponse<HealthResponse>> {
 export async function fetchReadiness(): Promise<ApiResponse<HealthResponse>> {
   return apiClient.get<ApiResponse<HealthResponse>>("/api/v1/ready");
 }
+

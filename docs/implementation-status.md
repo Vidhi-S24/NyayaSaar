@@ -135,3 +135,4 @@
 3. No database, auth, or AI integrations are active yet.
 4. Worker app (`apps/worker`) is not scaffolded; it will be added when background jobs are required (Stage 5+).
 5. The frontend health check (`/api/v1/health`) only works when the FastAPI server is running.
+
