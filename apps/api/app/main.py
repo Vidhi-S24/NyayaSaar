@@ -21,9 +21,9 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import get_settings
-from app.models.responses import ApiResponse
-from app.routers import health as health_router
+from apps.api.app.config import get_settings
+from apps.api.app.models.responses import ApiResponse
+from apps.api.app.routers import health as health_router
 
 settings = get_settings()
 

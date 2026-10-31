@@ -1,6 +1,103 @@
 # NyayaSaar — Implementation Status
 
-> Updated: Stage 1 complete
+> Updated: Stage 2 complete
+
+---
+
+## Completed stages
+
+### Stage 1 — Repository Audit and Foundation ✅
+
+**Completed:** 2026-10-29
+*(See stage-handoffs/stage-1.md for full details)*
+
+### Stage 2 — Premium Frontend and Application Experience ✅
+
+**Completed:** 2026-10-30
+
+#### What was built
+
+| Path | Description |
+|---|---|
+| `apps/web/src/app/page.tsx` | Landing page — full premium marketing/onboarding UI |
+| `apps/web/src/app/layout.tsx` | Root layout — offline-safe font fallbacks, metadata |
+| `apps/web/src/app/not-found.tsx` | Polished 404 page |
+| `apps/web/src/app/(app)/layout.tsx` | App shell layout for authenticated workspace routes |
+| `apps/web/src/app/(app)/dashboard/page.tsx` | Dashboard: stats, active cases, activity feed, module shortcuts |
+| `apps/web/src/app/(app)/cases/page.tsx` | Case list with search, filter, priority, status |
+| `apps/web/src/app/(app)/cases/[id]/page.tsx` | Case workspace: issues, documents, module links |
+| `apps/web/src/app/(app)/documents/page.tsx` | Document library with upload zone |
+| `apps/web/src/app/(app)/intelligence/page.tsx` | Case Intelligence module shell |
+| `apps/web/src/app/(app)/contradictions/page.tsx` | Contradiction & Gap Hunter shell |
+| `apps/web/src/app/(app)/precedents/page.tsx` | Precedent Explorer shell |
+| `apps/web/src/app/(app)/advocate/page.tsx` | Advocate Mode shell |
+| `apps/web/src/app/(app)/judge/page.tsx` | Judge / Clerk Mode shell |
+| `apps/web/src/app/(app)/history/page.tsx` | Research history screen |
+| `apps/web/src/app/(app)/settings/page.tsx` | Settings screen |
+| `apps/web/src/components/ui/button.tsx` | Button with CVA variants (default, teal, outline, ghost…) |
+| `apps/web/src/components/ui/card.tsx` | Card, CardHeader, CardContent, CardFooter |
+| `apps/web/src/components/ui/badge.tsx` | Badge with success/warning/destructive/outline variants |
+| `apps/web/src/components/ui/input.tsx` | Input field |
+| `apps/web/src/components/ui/separator.tsx` | Separator (Radix) |
+| `apps/web/src/components/ui/tooltip.tsx` | Tooltip (Radix) |
+| `apps/web/src/components/ui/tabs.tsx` | Tabs (Radix) |
+| `apps/web/src/components/ui/progress.tsx` | Progress bar |
+| `apps/web/src/components/ui/skeleton.tsx` | Loading skeleton |
+| `apps/web/src/components/layout/sidebar.tsx` | Collapsible sidebar with grouped nav, keyboard accessibility |
+| `apps/web/src/components/layout/topbar.tsx` | Top bar: search, notifications, account avatar |
+| `apps/web/src/components/layout/app-shell.tsx` | Full app shell (sidebar + topbar + main, mobile drawer) |
+| `apps/web/src/components/shared/demo-notice.tsx` | Prominent "demo data" warning banners |
+| `apps/web/src/components/shared/page-header.tsx` | Consistent page header with title/description/actions |
+| `apps/web/src/components/shared/case-ui.tsx` | CaseStatusBadge, PriorityDot, StatCard, EmptyState, ComingSoonState |
+| `apps/web/src/lib/demo-data/index.ts` | Fully typed demo fixtures — clearly labelled, not real research |
+
+#### Acceptance criteria status
+
+| Criterion | Status |
+|---|---|
+| UI builds and runs (`pnpm dev:web`) | ✅ Verified |
+| TypeScript type check passes (0 errors) | ✅ Verified |
+| Vitest tests pass (7/7) | ✅ Verified |
+| Next.js production build | ✅ Passes (offline: font fallback) |
+| Core navigation works between all routes | ✅ |
+| Visual language is consistent across screens | ✅ |
+| Desktop and mobile layouts usable | ✅ |
+| Design is intentionally art-directed | ✅ |
+| No fake AI analysis displayed | ✅ DemoNotice on every screen |
+| No fabricated legal authorities presented as real | ✅ Demo fixtures clearly labelled |
+| Loading/empty/error/disabled states present | ✅ |
+| Keyboard accessible, focus rings, aria labels | ✅ |
+
+---
+
+## Pending stages
+
+### Stage 3 — Database, Authentication, and User Management ⏳
+
+**Prerequisites:** Stage 2 complete (✅)
+
+**Scope:**
+- PostgreSQL + pgvector setup, SQLAlchemy models, Alembic migrations
+- Authentication (NextAuth.js or FastAPI JWT) + session validation
+- Case-level authorisation
+- User model, case model, document model
+- Real case CRUD API replacing demo fixtures
+
+### Stage 4 — Document Ingestion Pipeline ⏳
+### Stage 5 — Gemini / LangGraph Agentic Workflows ⏳
+### Stage 6 — Legal Analysis Modules ⏳
+### Stage 7 — Evaluation, Monitoring, and Deployment ⏳
+
+---
+
+## Known limitations (Stage 2)
+
+1. **Google Fonts**: `next/font/google` requires network access. In offline/sandbox builds, system font fallbacks are used via CSS custom properties. In production (Vercel), restore `next/font/google` imports in `layout.tsx`.
+2. **No authentication**: All routes are publicly accessible. Stage 3 will add auth and route protection.
+3. **Demo data only**: All case/document/activity data is static fixtures. Stage 3 replaces them with real API calls.
+4. **AI modules not connected**: All five intelligence module pages show "Coming — Stage 5" states.
+5. **No backend calls**: The frontend does not call the FastAPI backend yet (except via existing `api-client.ts`).
+
 
 ---
 

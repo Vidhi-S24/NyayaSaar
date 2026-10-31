@@ -12,8 +12,8 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter
 
-from app.config import get_settings
-from app.models.responses import ApiResponse, HealthResponse, HealthServiceStatus
+from apps.api.app.config import get_settings
+from apps.api.app.models.responses import ApiResponse, HealthResponse, HealthServiceStatus
 
 router = APIRouter(tags=["health"])
 settings = get_settings()
