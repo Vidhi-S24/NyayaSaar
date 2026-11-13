@@ -27,10 +27,53 @@ class ApiClientError extends Error {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Auth token (set by the AuthProvider after sign-in; bearer header injection)
+// ---------------------------------------------------------------------------
+
+let authToken: string | null = null;
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setApiAuthToken(token: string | null) {
+  authToken = token;
+}
+
+export function getApiAuthToken(): string | null {
+  return authToken;
+}
+
+/** Registers a callback fired when any API call returns 401 Unauthorized. */
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler;
+}
+
+/** Standard backend envelope: { success, data, error }. */
+export interface ApiEnvelope<T> {
+  success: boolean;
+  data?: T;
+  error?: { code: string; message: string; details?: Record<string, unknown> };
+}
+
+/**
+ * Validates an envelope-shaped response body and returns it whole.
+ * Callers access `.data`; a `success: false` body throws ApiClientError.
+ */
+function asEnvelope<T>(body: unknown, status: number): ApiEnvelope<T> {
+  const envelope = body as ApiEnvelope<T>;
+  if (!envelope.success) {
+    throw new ApiClientError(
+      envelope.error?.message ?? "Request failed",
+      status,
+      envelope.error?.code ?? "request_failed",
+    );
+  }
+  return envelope;
+}
+
 async function request<T>(
   path: string,
   options: FetchOptions = {},
-): Promise<T> {
+): Promise<ApiEnvelope<T>> {
   const { params, ...fetchOptions } = options;
 
   let url = `${API_BASE_URL}${path}`;
@@ -46,12 +89,17 @@ async function request<T>(
   const res = await fetch(url, {
     headers: {
       "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...fetchOptions.headers,
     },
     ...fetchOptions,
   });
 
   const body = await res.json().catch(() => null);
+
+  if (res.status === 401 && unauthorizedHandler) {
+    unauthorizedHandler();
+  }
 
   if (!res.ok) {
     const message =
@@ -60,11 +108,24 @@ async function request<T>(
     throw new ApiClientError(message, res.status, code);
   }
 
-  return body as T;
+  // FastAPI validation errors (422) return a plain detail list, not the envelope.
+  if (body && typeof body === "object" && "success" in body) {
+    return asEnvelope<T>(body, res.status);
+  }
+  // A 200 response without the standard envelope is a contract violation —
+  // surface it instead of pretending it succeeded.
+  throw new ApiClientError(
+    "Unexpected response shape from the API (missing envelope)",
+    res.status,
+    "invalid_response",
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Typed API methods
+//
+// T is the *payload* type; every method resolves to the full envelope
+// (ApiEnvelope<T>) so callers consistently use `.data`.
 // ---------------------------------------------------------------------------
 
 export const apiClient = {

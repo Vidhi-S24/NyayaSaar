@@ -1,4 +1,4 @@
-import { Brain, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { DemoNotice } from "@/components/shared/demo-notice";
 import { ComingSoonState } from "@/components/shared/case-ui";

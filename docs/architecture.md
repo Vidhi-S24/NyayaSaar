@@ -1,6 +1,6 @@
 # NyayaSaar — Architecture
 
-> Last updated: Stage 1 — Foundation
+> Last updated: Stage 3 — Database, Authentication, and Case Management
 
 ---
 
@@ -105,7 +105,47 @@ Browser
 
 ---
 
+## Stage 3 — Data model and authentication
+
+### Data model (PostgreSQL, Alembic migration `001`)
+
+```
+users                 cases                          case_memberships
+─────────────         ─────────────────────          ────────────────────
+id (uuid str) PK      id (uuid str) PK               id (uuid str) PK
+email (unique)        owner_id → users.id            case_id → cases.id
+hashed_password       title, case_number, court      user_id → users.id
+full_name             jurisdiction                   role (owner|editor|viewer)
+is_active, is_verified  status, priority             (unique: case_id+user_id)
+role                  summary (text)
+created_at/updated_at tags, issues (JSON)
+                      documents_count
+                      created_at/updated_at
+```
+
+- `cases.owner_id` is the authorization anchor: every case query is scoped to the authenticated user.
+- `case_memberships` is provisioned for future sharing (Stage 3 authorization is owner-only; see D-016).
+- Timestamps are `timestamptz` with `server_default=now()`; `updated_at` is maintained on update.
+- JSON columns (`tags`, `issues`) are portable across SQLite (development) and PostgreSQL.
+
+### Authentication flow
+
+```
+Sign in  POST /api/v1/auth/login  {email, password}
+             → bcrypt verify → JWT (HS256, 30 min) → {access_token, expires_in}
+Sign up  POST /api/v1/auth/register (same response; 409 on duplicate email)
+Session  GET /api/v1/auth/me (Authorization: Bearer <token>) → user profile
+Every protected route → get_current_user dependency → 401/403 on failure
+```
+
+- The frontend stores the token in `localStorage` (see D-013 for trade-offs) and injects it via the shared api-client; a global 401 handler signs the user out.
+- Case authorization is enforced in the service layer (`app/services/cases.py`) by including `owner_id` in every SQL query — not in the frontend.
+- Development fallback: with no `DATABASE_URL`, the API and seed script use a local SQLite file so the product runs without infrastructure.
+
+---
+
 ## External data flows and privacy
+
 
 | Provider | Data sent | Retention | Configurable? |
 |---|---|---|---|
@@ -160,8 +200,8 @@ See [decisions.md](decisions.md) for the rationale behind technology choices.
 | Stage | Scope | Key additions |
 |---|---|---|
 | 1 ✅ | Foundation | Monorepo, FastAPI skeleton, Next.js shell, docs |
-| 2 | Premium UI | Full dashboard, case workspace, design system |
-| 3 | Database + Auth | PostgreSQL, Alembic, authentication, authorisation |
+| 2 ✅ | Premium UI | Full dashboard, case workspace, design system |
+| 3 ✅ | Database + Auth | PostgreSQL, Alembic, JWT authentication, ownership authorisation, live case CRUD |
 | 4 | Document ingestion | Upload, parsing, chunking, embedding, storage |
 | 5 | Agentic workflows | LangGraph nodes, Gemini integration, tools |
 | 6 | Legal analysis | All five intelligence modules, retrieval |

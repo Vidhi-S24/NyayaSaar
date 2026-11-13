@@ -44,26 +44,65 @@ export interface ServiceHealth {
 // Cases
 // ---------------------------------------------------------------------------
 
-export type CaseStatus =
-  | "draft"
-  | "active"
-  | "in_review"
-  | "archived";
+export type CaseStatus = "active" | "review" | "closed" | "archived";
+
+export type CasePriority = "high" | "medium" | "low";
 
 export interface CaseSummary {
   id: string;
+  owner_id: string;
   title: string;
-  description?: string;
+  case_number: string | null;
+  court: string | null;
+  jurisdiction: string | null;
   status: CaseStatus;
+  priority: CasePriority;
+  documents_count: number;
   created_at: string;
   updated_at: string;
-  document_count: number;
 }
 
 export interface Case extends CaseSummary {
-  facts?: string;
-  legal_issues?: string[];
+  summary: string | null;
+  tags: string[];
+  issues: string[];
+}
+
+export interface CaseListResponse {
+  items: Case[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+}
+
+export interface CaseCreateInput {
+  title: string;
+  case_number?: string | null;
+  court?: string | null;
+  jurisdiction?: string | null;
+  status?: CaseStatus;
+  priority?: CasePriority;
+  summary?: string | null;
   tags?: string[];
+  issues?: string[];
+}
+
+export interface CaseUpdateInput extends Partial<CaseCreateInput> {}
+
+export interface User {
+  id: string;
+  email: string;
+  full_name: string | null;
+  is_active: boolean;
+  is_verified: boolean;
+  role: string;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
 }
 
 // ---------------------------------------------------------------------------

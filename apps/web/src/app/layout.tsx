@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Providers } from "@/components/providers";
 
 /**
  * Root layout — NyayaSaar Stage 2.
@@ -46,7 +47,7 @@ export default function RootLayout({
         `}</style>
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

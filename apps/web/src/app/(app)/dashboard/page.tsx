@@ -1,3 +1,14 @@
+"use client";
+
+/**
+ * Dashboard — live statistics from the authenticated user's real cases.
+ *
+ * Statistics that depend on document processing (Stage 4) or AI analysis
+ * (Stage 5) are shown honestly as "not yet available" — no fake numbers.
+ */
+
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import {
   FolderOpen,
   FileText,
@@ -7,33 +18,41 @@ import {
   Plus,
   ArrowRight,
 } from "lucide-react";
-import Link from "next/link";
-import { DEMO_CASES, DEMO_ACTIVITY, DEMO_STATS } from "@/lib/demo-data";
 import { PageHeader } from "@/components/shared/page-header";
-import { DemoNotice } from "@/components/shared/demo-notice";
-import { StatCard, CaseStatusBadge, PriorityDot } from "@/components/shared/case-ui";
+import { StatCard, CaseStatusBadge, PriorityDot, EmptyState } from "@/components/shared/case-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { listCases, formatRelativeTime } from "@/lib/api/cases";
+import { ApiClientError } from "@/lib/api-client";
+import type { Case } from "@nyayasaar/shared";
 
-export const metadata = { title: "Dashboard" };
-
-const activityIcons: Record<string, string> = {
-  document_uploaded: "📄",
-  analysis_complete: "✅",
-  case_created: "📁",
-  report_saved: "💾",
-  contradiction_found: "⚠️",
-};
+function computeStats(cases: Case[]) {
+  const active = cases.filter((c) => c.status === "active").length;
+  const review = cases.filter((c) => c.status === "review").length;
+  const documents = cases.reduce((sum, c) => sum + c.documents_count, 0);
+  return { total: cases.length, active, review, documents };
+}
 
 export default function DashboardPage() {
-  const activeCases = DEMO_CASES.filter((c) => c.status === "active");
+  const casesQuery = useQuery({
+    queryKey: ["cases", { page: 1, page_size: 100 }],
+    queryFn: () => listCases({ page: 1, page_size: 100 }),
+    select: (envelope) => envelope.data,
+  });
+
+  const cases = casesQuery.data?.items ?? [];
+  const stats = computeStats(cases);
+  const recentCases = [...cases]
+    .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))
+    .slice(0, 5);
+
+  const activeCasesList = recentCases.filter((c) => c.status === "active");
+  const shownCases = activeCasesList.length > 0 ? activeCasesList : recentCases;
 
   return (
     <div className="flex flex-col gap-6 p-6 pb-10">
-      <DemoNotice />
-
       <PageHeader
         title="Dashboard"
         description="Legal case intelligence workspace"
@@ -50,39 +69,57 @@ export default function DashboardPage() {
       {/* Stats row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Active Cases"
-          value={DEMO_STATS.activeCases}
+          label="Total Cases"
+          value={casesQuery.isLoading ? <Skeleton className="h-8 w-12" /> : stats.total}
           icon={<FolderOpen className="h-4 w-4" />}
-          trend="3 in progress"
+          trend={`${stats.active} active · ${stats.review} under review`}
         />
         <StatCard
-          label="Documents Processed"
-          value={DEMO_STATS.documentsProcessed}
+          label="Documents"
+          value={casesQuery.isLoading ? <Skeleton className="h-8 w-12" /> : stats.documents}
           icon={<FileText className="h-4 w-4" />}
-          trend="Across all workspaces"
+          trend="Upload available in Stage 4"
         />
         <StatCard
           label="Reports Generated"
-          value={DEMO_STATS.reportsGenerated}
+          value="—"
           icon={<TrendingUp className="h-4 w-4" />}
-          trend="This month"
+          trend="Available from Stage 5"
         />
         <StatCard
           label="Contradictions Found"
-          value={DEMO_STATS.contradictionsFound}
+          value="—"
           icon={<AlertTriangle className="h-4 w-4" />}
-          trend="Across all cases"
+          trend="Available from Stage 5"
         />
       </div>
 
+      {/* Error state */}
+      {casesQuery.isError && (
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-6 py-8 text-center">
+          <AlertTriangle className="h-5 w-5 text-red-600" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-medium text-red-900">Could not load your cases</p>
+            <p className="mt-1 text-xs text-red-800">
+              {casesQuery.error instanceof ApiClientError
+                ? casesQuery.error.message
+                : "The backend may be unavailable. Check that the API server is running."}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void casesQuery.refetch()}>
+            Retry
+          </Button>
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Active cases */}
+        {/* Recent / active cases */}
         <div className="lg:col-span-2">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Active Cases
+                  {activeCasesList.length > 0 ? "Active Cases" : "Recently Updated Cases"}
                 </CardTitle>
                 <Button asChild variant="ghost" size="sm" className="text-xs text-muted-foreground">
                   <Link href="/cases">
@@ -92,35 +129,64 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="divide-y divide-border">
-                {activeCases.map((c) => (
-                  <Link
-                    key={c.id}
-                    href={`/cases/${c.id}`}
-                    className="flex items-start gap-3 px-6 py-4 transition-colors hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                  >
-                    <PriorityDot priority={c.priority} className="mt-1.5 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-foreground">{c.title}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {c.caseNumber} · {c.court}
-                      </p>
+              {casesQuery.isLoading ? (
+                <div className="divide-y divide-border">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-start gap-3 px-6 py-4">
+                      <Skeleton className="mt-1.5 h-2 w-2 rounded-full" />
+                      <div className="flex-1 space-y-1.5">
+                        <Skeleton className="h-3.5 w-2/3" />
+                        <Skeleton className="h-2.5 w-1/3" />
+                      </div>
+                      <Skeleton className="h-5 w-16 rounded-full" />
                     </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1.5">
-                      <CaseStatusBadge status={c.status} />
-                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        {c.lastActivity}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : shownCases.length === 0 ? (
+                <EmptyState
+                  icon={<FolderOpen className="h-5 w-5" />}
+                  title="No cases yet"
+                  description="Create your first case workspace to get started."
+                  action={
+                    <Button variant="teal" size="sm" asChild>
+                      <Link href="/cases">
+                        <Plus className="h-3.5 w-3.5" />
+                        New Case
+                      </Link>
+                    </Button>
+                  }
+                />
+              ) : (
+                <div className="divide-y divide-border">
+                  {shownCases.map((c) => (
+                    <Link
+                      key={c.id}
+                      href={`/cases/${c.id}`}
+                      className="flex items-start gap-3 px-6 py-4 transition-colors hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                    >
+                      <PriorityDot priority={c.priority} className="mt-1.5 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-foreground">{c.title}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {[c.case_number, c.court].filter(Boolean).join(" · ") || "—"}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1.5">
+                        <CaseStatusBadge status={c.status} />
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {formatRelativeTime(c.updated_at)}
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Activity feed */}
+        {/* Activity feed — honest empty state until workflows land */}
         <div>
           <Card>
             <CardHeader className="pb-3">
@@ -129,25 +195,11 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="divide-y divide-border">
-                {DEMO_ACTIVITY.map((act) => (
-                  <div key={act.id} className="px-5 py-3.5">
-                    <div className="flex items-start gap-2.5">
-                      <span className="mt-0.5 text-sm" aria-hidden="true">
-                        {activityIcons[act.type]}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-foreground leading-snug">
-                          {act.description}
-                        </p>
-                        <p className="mt-1 text-[10px] text-muted-foreground">
-                          {act.caseTitle}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground/60">{act.timestamp}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="px-5 pb-5">
+                <EmptyState
+                  title="No activity yet"
+                  description="Activity tracking (uploads, analyses, reports) will be recorded once document processing is connected in Stage 4."
+                />
               </div>
             </CardContent>
           </Card>
@@ -186,4 +238,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

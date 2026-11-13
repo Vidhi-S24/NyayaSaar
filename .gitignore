@@ -9,6 +9,11 @@ __pycache__/
 .venv/
 venv/
 env/
+# Local development SQLite databases (dev fallback + test artifacts)
+apps/api/*.db
+# TypeScript incremental build cache (stale cache can mask type errors)
+apps/web/tsconfig.tsbuildinfo
+*.tsbuildinfo
 dist/
 build/
 *.egg-info/

@@ -1,17 +1,20 @@
-import { Settings, User, Key, Bell, Shield } from "lucide-react";
+"use client";
+
+import { User, Key, Bell, Shield } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { DemoNotice } from "@/components/shared/demo-notice";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-
-export const metadata = { title: "Settings" };
+import { useAuth } from "@/lib/auth/auth-context";
 
 export default function SettingsPage() {
+  const { user, signOut } = useAuth();
+
   return (
     <div className="flex flex-col gap-6 p-6 pb-10">
-      <DemoNotice message="Settings are not yet persisted. Authentication and user management will be added in Stage 3." />
+      <DemoNotice message="Profile editing is not yet persisted. Session, authentication, and case data are live as of Stage 3." />
 
       <PageHeader
         title="Settings"
@@ -25,8 +28,8 @@ export default function SettingsPage() {
             {[
               { icon: User, label: "Profile" },
               { icon: Key, label: "API & Integrations", note: "Stage 5" },
-              { icon: Bell, label: "Notifications", note: "Stage 3" },
-              { icon: Shield, label: "Security & Privacy", note: "Stage 3" },
+              { icon: Bell, label: "Notifications", note: "Stage 4" },
+              { icon: Shield, label: "Security & Privacy", note: "Stage 4" },
             ].map(({ icon: Icon, label, note }) => (
               <li key={label}>
                 <button
@@ -50,7 +53,7 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="text-sm">Profile</CardTitle>
               <CardDescription className="text-xs">
-                Authentication is added in Stage 3. Fields below are non-functional placeholders.
+                Your signed-in account. Name changes will be persisted in a later stage.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
@@ -58,15 +61,20 @@ export default function SettingsPage() {
                 <label className="text-xs font-medium text-foreground" htmlFor="name">
                   Display Name
                 </label>
-                <Input id="name" defaultValue="Vidhi Soni" disabled className="max-w-sm" />
+                <Input id="name" defaultValue={user?.full_name ?? ""} disabled className="max-w-sm" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-foreground" htmlFor="email">
                   Email
                 </label>
-                <Input id="email" type="email" defaultValue="demo@nyayasaar.in" disabled className="max-w-sm" />
+                <Input id="email" type="email" defaultValue={user?.email ?? ""} disabled className="max-w-sm" />
               </div>
-              <Button size="sm" disabled>Save Changes — Stage 3</Button>
+              <div className="flex gap-2">
+                <Button size="sm" disabled>Save Changes — later stage</Button>
+                <Button size="sm" variant="outline" onClick={() => signOut()}>
+                  Sign out
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

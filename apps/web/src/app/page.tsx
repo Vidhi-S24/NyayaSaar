@@ -25,7 +25,7 @@ export default function HomePage() {
           <span className="font-serif text-lg font-semibold tracking-tight text-foreground">NyayaSaar</span>
         </div>
         <nav className="ml-auto flex items-center gap-2" aria-label="Top navigation">
-          <Button asChild variant="ghost" size="sm"><Link href="/dashboard">Sign In</Link></Button>
+          <Button asChild variant="ghost" size="sm"><Link href="/signin">Sign In</Link></Button>
           <Button asChild size="sm" variant="teal">
             <Link href="/dashboard">Enter Workspace <ArrowRight className="h-3.5 w-3.5" /></Link>
           </Button>

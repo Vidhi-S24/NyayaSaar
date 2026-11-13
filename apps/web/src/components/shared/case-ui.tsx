@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { CaseStatus, Priority } from "@/lib/demo-data";
+import type { CaseStatus, CasePriority } from "@nyayasaar/shared";
 import { Badge } from "@/components/ui/badge";
 
 export function CaseStatusBadge({ status }: { status: CaseStatus }) {
@@ -13,7 +13,7 @@ export function CaseStatusBadge({ status }: { status: CaseStatus }) {
   return <Badge variant={variant}>{label}</Badge>;
 }
 
-export function PriorityDot({ priority, className }: { priority: Priority; className?: string }) {
+export function PriorityDot({ priority, className }: { priority: CasePriority; className?: string }) {
   const colors = {
     high: "bg-red-400",
     medium: "bg-amber-400",
@@ -29,14 +29,13 @@ export function PriorityDot({ priority, className }: { priority: Priority; class
 
 interface StatCardProps {
   label: string;
-  value: string | number;
+  value: React.ReactNode;
   icon?: React.ReactNode;
   trend?: string;
   className?: string;
 }
 
-export function StatCard({ label, value, icon, trend, className }: StatCardProps) {
-  return (
+export function StatCard({ label, value, icon, trend, className }: StatCardProps) {  return (
     <div
       className={cn(
         "flex flex-col gap-1 rounded-lg border border-border bg-card p-5",

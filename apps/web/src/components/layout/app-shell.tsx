@@ -13,6 +13,7 @@ interface AppShellProps {
 export function AppShell({ children, title }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  void setCollapsed; // collapse toggle is wired when the sidebar gets its own control
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

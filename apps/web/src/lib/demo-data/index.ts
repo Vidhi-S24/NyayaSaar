@@ -8,8 +8,8 @@
  */
 
 export type CaseStatus = "active" | "review" | "closed" | "archived";
+export type CasePriority = "high" | "medium" | "low";
 export type DocumentType = "petition" | "judgment" | "affidavit" | "order" | "contract" | "statute" | "brief";
-export type Priority = "high" | "medium" | "low";
 
 export interface DemoCase {
   id: string;
@@ -17,7 +17,7 @@ export interface DemoCase {
   caseNumber: string;
   court: string;
   status: CaseStatus;
-  priority: Priority;
+  priority: CasePriority;
   documentsCount: number;
   lastActivity: string;
   createdAt: string;

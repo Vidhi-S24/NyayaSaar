@@ -10,33 +10,46 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 
+import sqlalchemy as sa
 from fastapi import APIRouter
 
-from apps.api.app.config import get_settings
-from apps.api.app.models.responses import ApiResponse, HealthResponse, HealthServiceStatus
+from app.config import get_settings
+from app.models.responses import ApiResponse, HealthResponse, HealthServiceStatus
 
 router = APIRouter(tags=["health"])
 settings = get_settings()
 
 
-def _make_health(*, include_service_checks: bool = False) -> HealthResponse:
+async def _probe_database() -> HealthServiceStatus:
+    """Do a real SELECT 1 against the configured DB."""
+    if not settings.database_configured:
+        return HealthServiceStatus(
+            status="unavailable",
+            message="DATABASE_URL not configured; required from Stage 3",
+        )
+    try:
+        from app.db.base import async_engine
+
+        t0 = time.monotonic()
+        async with async_engine.connect() as conn:
+            await conn.execute(sa.text("SELECT 1"))
+        latency_ms = (time.monotonic() - t0) * 1000
+        return HealthServiceStatus(status="ok", latency_ms=round(latency_ms, 2))
+    except Exception as exc:
+        return HealthServiceStatus(status="degraded", message=str(exc))
+
+
+async def _make_health(*, include_service_checks: bool = False) -> HealthResponse:
     """Build a HealthResponse, optionally probing optional services."""
 
     services: dict[str, HealthServiceStatus] = {}
     overall = "ok"
 
     if include_service_checks:
-        # Database
-        if settings.database_configured:
-            # Actual probe will be added in Stage 3 when SQLAlchemy is wired.
-            services["database"] = HealthServiceStatus(
-                status="ok", message="Connection pool not yet initialised (Stage 1)"
-            )
-        else:
-            services["database"] = HealthServiceStatus(
-                status="unavailable",
-                message="DATABASE_URL not configured; required from Stage 3",
-            )
+        # Database — real ping
+        db_status = await _probe_database()
+        services["database"] = db_status
+        if db_status.status != "ok":
             overall = "degraded"
 
         # Redis
@@ -87,7 +100,7 @@ async def health() -> ApiResponse[HealthResponse]:
     Liveness endpoint — returns 200 quickly without probing external services.
     Suitable for Render / load-balancer health checks.
     """
-    return ApiResponse.ok(_make_health())
+    return ApiResponse.ok(await _make_health())
 
 
 @router.get(
@@ -101,6 +114,5 @@ async def ready() -> ApiResponse[HealthResponse]:
     Returns 200 even when optional services are unavailable (they are flagged
     as ``unavailable``, not as errors, so Render does not restart the pod).
     """
-    health_data = _make_health(include_service_checks=True)
+    health_data = await _make_health(include_service_checks=True)
     return ApiResponse.ok(health_data)
-

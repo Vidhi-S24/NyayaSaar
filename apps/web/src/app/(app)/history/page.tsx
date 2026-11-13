@@ -1,4 +1,4 @@
-import { History, FileDown } from "lucide-react";
+import { FileDown } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { DemoNotice } from "@/components/shared/demo-notice";
 import { DEMO_ACTIVITY } from "@/lib/demo-data";

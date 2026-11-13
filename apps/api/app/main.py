@@ -14,6 +14,7 @@ The root path / is a lightweight redirect/info endpoint for diagnostics.
 from __future__ import annotations
 
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -21,9 +22,11 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from apps.api.app.config import get_settings
-from apps.api.app.models.responses import ApiResponse
-from apps.api.app.routers import health as health_router
+from app.config import get_settings
+from app.models.responses import ApiResponse
+from app.routers import health as health_router
+from app.routers import auth as auth_router
+from app.routers import cases as cases_router
 
 settings = get_settings()
 
@@ -56,19 +59,59 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.app_version,
     )
 
-    # Warn about unconfigured services so operators can spot problems early.
     if not settings.gemini_configured:
         logger.warning(
             "GEMINI_API_KEY is not set. AI features will be unavailable. "
             "Set the key in your .env file or environment."
         )
-    if not settings.database_configured:
+
+    # Initialise the DB engine / connection pool if DATABASE_URL is set
+    if settings.database_configured:
+        try:
+            from app.db.base import async_engine
+            import sqlalchemy as sa
+
+            async with async_engine.connect() as conn:
+                await conn.execute(sa.text("SELECT 1"))
+            logger.info("Database connection pool initialised.")
+        except Exception as exc:
+            logger.error("Database connection failed: %s", exc)
+    else:
         logger.warning(
-            "DATABASE_URL is not set. Database features will be unavailable "
-            "until Stage 3 wires up PostgreSQL."
+            "DATABASE_URL is not set — using the local development fallback "
+            "(SQLite file ./nyayasaar-dev.db). Fine for development; "
+            "configure PostgreSQL for production."
         )
+        try:
+            from sqlalchemy import inspect
+
+            from app.db.base import Base, async_engine
+
+            def _get_table_names(sync_conn):
+                return inspect(sync_conn).get_table_names()
+
+            async with async_engine.connect() as conn:
+                tables = await conn.run_sync(_get_table_names)
+
+            if "users" not in tables:
+                logger.info(
+                    "Empty dev database — creating schema via SQLAlchemy metadata "
+                    "(for production use: alembic upgrade head)."
+                )
+                async with async_engine.begin() as conn:
+                    await conn.run_sync(Base.metadata.create_all)
+        except Exception as exc:
+            logger.error("Dev database schema check failed: %s", exc)
 
     yield  # ← application runs here
+
+    # Dispose the engine on shutdown
+    if settings.database_configured:
+        try:
+            from app.db.base import async_engine
+            await async_engine.dispose()
+        except Exception:
+            pass
 
     logger.info("NyayaSaar API shutting down.")
 
@@ -103,6 +146,17 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # -------------------------------------------------------------------
+    # X-Request-ID middleware
+    # -------------------------------------------------------------------
+
+    @app.middleware("http")
+    async def request_id_middleware(request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
 
     # -------------------------------------------------------------------
     # Global exception handlers
@@ -141,10 +195,8 @@ def create_app() -> FastAPI:
     API_PREFIX = "/api/v1"
 
     app.include_router(health_router.router, prefix=API_PREFIX)
-    # Future stages will register additional routers here:
-    # app.include_router(cases_router.router, prefix=API_PREFIX)
-    # app.include_router(documents_router.router, prefix=API_PREFIX)
-    # app.include_router(analysis_router.router, prefix=API_PREFIX)
+    app.include_router(auth_router.router, prefix=API_PREFIX)
+    app.include_router(cases_router.router, prefix=API_PREFIX)
 
     return app
 
@@ -154,4 +206,3 @@ def create_app() -> FastAPI:
 # ---------------------------------------------------------------------------
 
 app = create_app()
-

@@ -64,6 +64,16 @@ class Settings(BaseSettings):
     )
 
     # -----------------------------------------------------------------------
+    # JWT / Auth
+    # -----------------------------------------------------------------------
+    jwt_secret_key: str = Field(
+        default="",
+        description="JWT signing secret. Falls back to app_secret_key if empty.",
+    )
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 30
+
+    # -----------------------------------------------------------------------
     # Database (staged)
     # -----------------------------------------------------------------------
     database_url: str = Field(
