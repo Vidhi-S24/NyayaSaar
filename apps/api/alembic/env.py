@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from app.db.base import Base  # noqa: E402
 import app.db.models.user  # noqa: F401, E402
 import app.db.models.case  # noqa: F401, E402
+import app.db.models.document  # noqa: F401, E402
 
 config = context.config
 

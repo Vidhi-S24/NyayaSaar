@@ -155,6 +155,53 @@ export const apiClient = {
 
   delete: <T>(path: string, options?: FetchOptions) =>
     request<T>(path, { ...options, method: "DELETE" }),
+
+  /**
+   * Upload a FormData payload (file upload).
+   * Does NOT set Content-Type — the browser must set it with the multipart
+   * boundary. The auth token is still injected.
+   */
+  upload: <T>(path: string, formData: FormData, options?: FetchOptions) => {
+    const { params, ...rest } = options ?? {};
+    let url = `${API_BASE_URL}${path}`;
+    if (params) {
+      const qs = new URLSearchParams(
+        Object.entries(params)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => [k, String(v)]),
+      ).toString();
+      if (qs) url += `?${qs}`;
+    }
+    // We bypass the shared request() helper so we can skip Content-Type
+    return (async (): Promise<ApiEnvelope<T>> => {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: formData,
+        ...rest,
+      });
+      const body = await res.json().catch(() => null);
+      if (res.status === 401 && unauthorizedHandler) {
+        unauthorizedHandler();
+      }
+      if (!res.ok) {
+        const message =
+          body?.error?.message ?? body?.detail ?? `HTTP ${res.status}`;
+        const code = body?.error?.code ?? "request_failed";
+        throw new ApiClientError(message, res.status, code);
+      }
+      if (body && typeof body === "object" && "success" in body) {
+        return asEnvelope<T>(body, res.status);
+      }
+      throw new ApiClientError(
+        "Unexpected response shape from the API (missing envelope)",
+        res.status,
+        "invalid_response",
+      );
+    })();
+  },
 };
 
 export { ApiClientError };

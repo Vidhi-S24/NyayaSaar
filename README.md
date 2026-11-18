@@ -130,7 +130,7 @@ From `apps/api/` (with the venv active):
 
 | Command | Description |
 |---|---|
-| `python -m pytest tests/` | Run all backend tests (25 passing as of Stage 3) |
+| `python -m pytest tests/` | Run all backend tests (75 passing as of Stage 4) |
 | `alembic upgrade head` | Apply database migrations (needs `DATABASE_SYNC_URL`) |
 | `python -m scripts.seed_demo` | Seed a demo user + labelled [DEMO] sample cases (idempotent) |
 | `uvicorn app.main:app --reload --port 8000` | Start the API |
@@ -154,7 +154,7 @@ From `apps/api/` (with the venv active):
 | 1 | Repository audit and foundation | ✅ Complete |
 | 2 | Premium frontend and application experience | ✅ Complete |
 | 3 | Database, authentication, and user management | ✅ Complete |
-| 4 | Document ingestion pipeline | ⏳ Pending |
+| 4 | Document ingestion pipeline | ✅ Complete |
 | 5 | Gemini/LangGraph agentic workflows | ⏳ Pending |
 | 6 | Retrieval and legal analysis modules | ⏳ Pending |
 | 7 | Evaluation, monitoring, and deployment | ⏳ Pending |

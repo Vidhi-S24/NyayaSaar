@@ -14,6 +14,7 @@ from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.db.models.case import Case, CaseMembership
+    from app.db.models.document import Document
 
 
 class User(TimestampMixin, Base):
@@ -47,6 +48,9 @@ class User(TimestampMixin, Base):
     )
     memberships: Mapped[list["CaseMembership"]] = relationship(
         "CaseMembership", back_populates="user"
+    )
+    documents: Mapped[list["Document"]] = relationship(
+        "Document", back_populates="owner"
     )
 
     def __repr__(self) -> str:

@@ -27,9 +27,9 @@ pyjwt[crypto]>=2.9.0,<3.0.0
 # langchain>=0.3.0
 # langchain-google-genai>=2.0.0
 
-# Documents (staged)
-# pymupdf>=1.24.0
-# docling>=2.0.0
+# Documents (Stage 4)
+PyMuPDF>=1.24.0,<1.26.0
+python-docx>=1.1.0,<2.0.0
 
 # Background jobs (staged)
 # celery[redis]>=5.4.0

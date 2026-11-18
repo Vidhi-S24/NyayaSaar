@@ -27,6 +27,7 @@ from app.models.responses import ApiResponse
 from app.routers import health as health_router
 from app.routers import auth as auth_router
 from app.routers import cases as cases_router
+from app.routers import documents as documents_router
 
 settings = get_settings()
 
@@ -197,6 +198,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router.router, prefix=API_PREFIX)
     app.include_router(auth_router.router, prefix=API_PREFIX)
     app.include_router(cases_router.router, prefix=API_PREFIX)
+    app.include_router(documents_router.router, prefix=API_PREFIX)
 
     return app
 

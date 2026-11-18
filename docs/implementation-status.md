@@ -1,10 +1,63 @@
 # NyayaSaar — Implementation Status
 
-> Updated: Stage 3 complete
+> Updated: Stage 4 complete
 
 ---
 
 ## Completed stages
+
+### Stage 4 — Document Ingestion Pipeline ✅
+
+**Completed:** 2026-11-18
+*(See stage-handoffs/stage-4.md for full details)*
+
+#### What was built
+
+| Path | Description |
+|---|---|
+| `apps/api/app/db/models/document.py` | `Document` + `DocumentChunk` models; `ProcessingStatus` enum |
+| `apps/api/alembic/versions/002_add_documents.py` | Migration: `documents` + `document_chunks` tables |
+| `apps/api/app/schemas/documents.py` | Pydantic schemas for all document endpoints |
+| `apps/api/app/services/storage.py` | `StorageProvider` ABC; `LocalStorageProvider`; `S3StorageProvider` stub |
+| `apps/api/app/services/extraction.py` | `validate_upload()` (magic bytes + extension + size); `extract_pdf/docx/txt()` |
+| `apps/api/app/services/documents.py` | Full document service: create, process, retry, list, get, chunks, delete |
+| `apps/api/app/routers/documents.py` | 6 endpoints, all case-ownership-gated |
+| `apps/api/tests/test_documents.py` | 16 HTTP integration tests |
+| `apps/api/tests/test_extraction.py` | Unit tests for validation + extraction |
+| `apps/api/tests/test_storage.py` | Unit tests for storage providers |
+| `packages/shared/src/index.ts` | `Document`, `DocumentListResponse`, `DocumentChunk` types |
+| `apps/web/src/lib/api/documents.ts` | Typed frontend API wrappers |
+| `apps/web/src/lib/api-client.ts` | Added `upload()` method (FormData, auth-injected) |
+| `apps/web/src/components/documents/document-upload.tsx` | Drag-and-drop upload panel |
+| `apps/web/src/components/documents/document-list.tsx` | Document rows with status badges, delete, retry, preview |
+| `apps/web/src/components/documents/document-text-preview.tsx` | Page-navigable extracted text viewer (XSS-safe) |
+| `apps/web/src/app/(app)/cases/[id]/page.tsx` | Documents tab wired with real upload + list |
+| `apps/web/src/app/(app)/documents/page.tsx` | Real document library across all cases |
+
+#### Acceptance criteria status
+
+| Criterion | Status |
+|---|---|
+| Upload + validate (extension, magic bytes, size) | ✅ |
+| Safe storage keys + provider abstraction | ✅ |
+| Text extraction with page-numbered chunks | ✅ |
+| Scanned PDF detection + OCR extension point | ✅ |
+| Processing status + bounded retries (3) | ✅ |
+| Frontend upload, list, preview, delete, retry | ✅ |
+| Case authorization on all endpoints | ✅ |
+| Failures don't falsely mark as completed | ✅ |
+
+#### Verification results (actual)
+
+```
+apps/api:  pytest tests/ -v  → 75 collected; all passed
+           alembic upgrade head → 002_add_documents applied (SQLite dev)
+apps/web:  tsc --noEmit      → 0 errors
+           vitest run         → 20/20 passed (3 files)
+           next build         → exit 0; 15 routes compiled
+```
+
+---
 
 ### Stage 3 — Database, Authentication, and Case Management ✅
 
@@ -84,7 +137,7 @@ Full landing page, dashboard, case workspace, document library, module shells, d
 
 ## Pending stages
 
-### Stage 4 — Document Ingestion Pipeline ⏳
+### Stage 4 — Document Ingestion Pipeline ✅ (complete — see above)
 
 **Prerequisites:** Stage 3 complete (✅)
 

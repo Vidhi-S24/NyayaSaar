@@ -1,6 +1,6 @@
 # NyayaSaar — Deployment Guide
 
-> Last updated: Stage 3 — Database, Authentication, and Case Management
+> Last updated: Stage 4 — Document Ingestion Pipeline
 
 ---
 
@@ -129,6 +129,14 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 | `NEO4J_URI` | Optional | Neo4j for citation graphs |
 | `NEO4J_USER` | Optional | Neo4j username |
 | `NEO4J_PASSWORD` | Optional | Neo4j password |
+| `STORAGE_BACKEND` | No | `local` (default) or `s3` |
+| `STORAGE_LOCAL_PATH` | No | Root dir for local uploads (default `./uploads`); ignored when `STORAGE_BACKEND=s3` |
+| `AWS_BUCKET_NAME` | If `s3` | S3 bucket name |
+| `AWS_REGION` | If `s3` | AWS region (default `us-east-1`) |
+| `AWS_ACCESS_KEY_ID` | If `s3` | S3 credentials |
+| `AWS_SECRET_ACCESS_KEY` | If `s3` | S3 credentials |
+| `MAX_UPLOAD_SIZE_MB` | No | Per-file size limit in MB (default `50`) |
+| `MAX_DOCUMENTS_PER_CASE` | No | Hard cap per case (default `50`) |
 
 ### Cost notes (Render)
 
@@ -175,7 +183,10 @@ pip install -r requirements.txt && alembic upgrade head
 
 - Alembic reads `DATABASE_SYNC_URL` (sync psycopg-3 URL) — on Render, take the internal database URL and replace the driver: `postgresql+psycopg://...`.
 - `DATABASE_URL` (used by the app at runtime) must be the async variant: `postgresql+asyncpg://...`.
-- Migration `001` creates `users`, `cases`, and `case_memberships`. Run `alembic downgrade base` only when you accept data loss.
+- Migration `001` creates `users`, `cases`, and `case_memberships`.
+- Migration `002` (Stage 4) creates `documents` and `document_chunks`; enables `pgvector` extension (`CREATE EXTENSION IF NOT EXISTS vector`).
+- Run `alembic upgrade head` to apply all pending migrations atomically.
+- Run `alembic downgrade base` only when you accept full data loss.
 - ⚠️ PostgreSQL behaviour of migration `001` has been logic-verified against SQLite (see `docs/decisions.md` D-015); run `alembic upgrade head` against the production database once at first deploy and confirm the three tables exist.
 
 ---
@@ -213,6 +224,7 @@ pip install -r requirements.txt && alembic upgrade head
 - [ ] All file uploads validated (type, size, sanitised filename)
 - [x] Authentication enabled (Stage 3 — JWT bearer, bcrypt password hashing)
 - [x] Case-level authorisation enabled (Stage 3 — ownership enforced in SQL, tested)
+- [x] File uploads validated — extension, magic bytes, size, UUID-based storage key (Stage 4)
 - [ ] Demo seed data removed / demo password changed before real use
 - [ ] Rate limiting enabled (Stage 7)
 - [ ] HTTPS enforced on all services (automatic on Render/Vercel)

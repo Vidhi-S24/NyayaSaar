@@ -1,6 +1,6 @@
 # NyayaSaar — Architecture
 
-> Last updated: Stage 3 — Database, Authentication, and Case Management
+> Last updated: Stage 4 — Document Ingestion Pipeline
 
 ---
 
@@ -105,6 +105,67 @@ Browser
 
 ---
 
+## Stage 4 — Document ingestion pipeline
+
+### Data model additions (Alembic migration `002`)
+
+```
+documents                          document_chunks
+─────────────────────────          ──────────────────────────────
+id (uuid str) PK                   id (uuid str) PK
+case_id → cases.id                 document_id → documents.id
+original_name (display only)       page_number (int)
+storage_key (UUID-derived path)    chunk_index (int)
+content_type                       content (text)
+file_size_bytes                    char_count (int)
+processing_status                  embedding (ARRAY Float / pgvector)
+  pending | processing |           created_at
+  completed | failed |
+  ocr_required
+page_count
+processing_notes (failure info)
+extracted_at
+created_at / updated_at
+```
+
+### Storage abstraction
+
+```
+StorageProvider (ABC)
+  ├── LocalStorageProvider  — dev; files at STORAGE_LOCAL_PATH
+  └── S3StorageProvider     — prod stub; wires boto3 in Stage 7
+
+Storage key: uploads/{case_id}/{uuid4}.{ext}
+  — derived server-side only; user filename never touches the path
+```
+
+### Extraction pipeline
+
+```
+POST /api/v1/cases/{case_id}/documents (multipart)
+  → validate_upload()   magic-byte check + extension + size limit
+  → make_storage_key()  UUID-based path
+  → storage.save()      write to local disk or S3
+  → create_document()   persist Document row (status=processing)
+  → process_document()  synchronous (see D-020)
+      ├─ PDF  → PyMuPDF page-by-page → DocumentChunk per page
+      │         if avg chars/page < 50 → status=ocr_required
+      ├─ DOCX → python-docx paragraph extraction → single chunk
+      └─ TXT  → UTF-8/Latin-1 fallback → single chunk
+  → update Document (status=completed|failed|ocr_required)
+  → return DocumentResponse
+```
+
+### Document processing states
+
+```
+pending → processing → completed
+                    ↘ failed          (retry up to 3 times)
+                    ↘ ocr_required    (scanned PDF; no auto-retry)
+```
+
+---
+
 ## Stage 3 — Data model and authentication
 
 ### Data model (PostgreSQL, Alembic migration `001`)
@@ -202,8 +263,8 @@ See [decisions.md](decisions.md) for the rationale behind technology choices.
 | 1 ✅ | Foundation | Monorepo, FastAPI skeleton, Next.js shell, docs |
 | 2 ✅ | Premium UI | Full dashboard, case workspace, design system |
 | 3 ✅ | Database + Auth | PostgreSQL, Alembic, JWT authentication, ownership authorisation, live case CRUD |
-| 4 | Document ingestion | Upload, parsing, chunking, embedding, storage |
-| 5 | Agentic workflows | LangGraph nodes, Gemini integration, tools |
+| 4 ✅ | Document ingestion | Upload, validation, extraction, chunking, storage abstraction, frontend UI |
+| 5 | Agentic workflows | LangGraph nodes, Gemini integration, embedding, hybrid retrieval |
 | 6 | Legal analysis | All five intelligence modules, retrieval |
 | 7 | Evaluation + deploy | LangSmith, RAGAS, Render/Vercel config, CI |
 

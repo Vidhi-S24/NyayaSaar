@@ -159,3 +159,42 @@
 **Rationale:** The original fallback was `sqlite:///:memory:`, which broke real use two ways: every connection in the async pool received a fresh empty database (causing intermittent `no such table: users` → HTTP 500 on register/login), and no account could persist across restarts. This was verified live: `POST /api/v1/auth/register` returned 500 with no `DATABASE_URL`, 201 after the fix.
 **Consequence:** Users can sign up / sign in with zero configuration; data persists across server restarts. The seeded demo account (`demo@nyayasaar.example` / `demo-password-123`) is created by `python -m scripts.seed_demo`.
 
+
+---
+
+## Stage 4 — Document Ingestion Pipeline
+
+### D-020: Synchronous extraction (no Celery worker in Stage 4)
+
+**Date:** Stage 4
+**Decision:** Document text extraction runs synchronously inside the upload request handler (`process_document()` called inline after `create_document()`). There is no background worker, Redis, or Celery in Stage 4.
+**Rationale:** PyMuPDF text extraction is fast (< 1–2 s for typical legal documents up to ~50 MB). Keeping extraction synchronous avoids adding Redis + Celery infrastructure until there is a demonstrated need. The API returns `processing_status: "processing"` immediately after save, then sets it to `completed` or `failed` within the same request. The frontend polls for status changes.
+**Alternatives considered:** Celery + Redis worker (rejected: unnecessary complexity before Stage 5 when LangGraph workflows also need a worker; defer both to the same infrastructure addition), FastAPI BackgroundTasks (rejected: not retriable, no durable state — if the process restarts mid-extraction the task is lost).
+**Consequence:** Upload requests block until extraction completes. For very large files or OCR, this will become a timeout risk. When that happens, move `process_document()` into a Celery task (Stage 5 or 6). The service layer is already designed so that extraction is decoupled from the HTTP handler — the router calls `create_document()` then `process_document()`; changing to async task dispatch requires only changing the router call site, not the service itself.
+**When to revisit:** When average extraction time exceeds 10 s, or when OCR is added.
+
+---
+
+### D-021: Storage key derived from UUID, never from user filename
+
+**Date:** Stage 4
+**Decision:** `make_storage_key()` generates storage paths from a UUID4 and the file extension only: `uploads/{case_id}/{uuid}.{ext}`. The original filename is stored in `Document.original_name` for display but never used in the file path.
+**Rationale:** User-supplied filenames are untrusted. Path traversal (`../../etc/passwd`), null bytes, shell metacharacters, and Unicode normalization attacks are all neutralized by ignoring the filename entirely in the path. The extension is taken from the validated MIME/magic-byte check, not the client-supplied extension.
+
+---
+
+### D-022: Magic-byte validation; never trust client Content-Type
+
+**Date:** Stage 4
+**Decision:** `validate_upload()` reads the first 8 bytes of the uploaded file and checks them against known signatures for PDF, DOCX/ZIP, and TXT. The client-supplied `content_type` and file extension are cross-checked but do not override the magic-byte result.
+**Rationale:** A malicious client can set any `Content-Type` header or any file extension. The magic-byte check is the only server-side control that reflects actual file content.
+**What is checked:** `%PDF-` for PDF; `PK\x03\x04` for DOCX (which is a ZIP); printable UTF-8/ASCII for TXT. Files that fail the check are rejected with HTTP 415.
+
+---
+
+### D-023: Scanned PDF detection without full OCR
+
+**Date:** Stage 4
+**Decision:** After extracting a PDF page, if the extracted character count is below a threshold (< 50 chars per page on average) the document is flagged as `processing_status = "ocr_required"` rather than `completed`. A `processing_notes` field explains the situation.
+**Rationale:** PyMuPDF cannot extract text from image-only PDFs — it returns empty strings. Rather than silently returning an empty extraction (which would be misleading to legal researchers), the platform explicitly reports that the document appears to be scanned and requires OCR. This is honest and actionable. OCR integration (Tesseract or EasyOCR) is an extension point for a future stage.
+**Consequence:** Scanned documents show a clear "OCR required" status in the UI. Users are not misled into thinking the document was analysed.
