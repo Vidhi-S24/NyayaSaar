@@ -22,12 +22,16 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.ai.registry import resolve_ai_config
 from app.config import get_settings
 from app.models.responses import ApiResponse
 from app.routers import health as health_router
 from app.routers import auth as auth_router
 from app.routers import cases as cases_router
 from app.routers import documents as documents_router
+from app.routers import analysis as analysis_router
+from app.routers import ai as ai_router
+from app.services.analysis import WorkflowRunner, recover_stale_workflows
 
 settings = get_settings()
 
@@ -60,10 +64,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.app_version,
     )
 
-    if not settings.gemini_configured:
+    ai_config = resolve_ai_config(settings)
+    if ai_config.is_mock:
         logger.warning(
-            "GEMINI_API_KEY is not set. AI features will be unavailable. "
-            "Set the key in your .env file or environment."
+            "AI fixture mode is active (provider=%s). No AI model will be called. %s",
+            ai_config.requested_provider,
+            ai_config.message,
+        )
+    elif not ai_config.configured:
+        logger.warning("No AI provider is configured. %s", ai_config.message)
+    else:
+        logger.info(
+            "AI provider configured provider=%s model=%s",
+            ai_config.provider,
+            ai_config.model,
         )
 
     # Initialise the DB engine / connection pool if DATABASE_URL is set
@@ -94,15 +108,46 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             async with async_engine.connect() as conn:
                 tables = await conn.run_sync(_get_table_names)
 
-            if "users" not in tables:
+            required_tables = {
+                "users",
+                "cases",
+                "case_memberships",
+                "documents",
+                "document_chunks",
+                "workflow_runs",
+            }
+            missing_tables = required_tables - set(tables)
+            if missing_tables:
                 logger.info(
-                    "Empty dev database — creating schema via SQLAlchemy metadata "
-                    "(for production use: alembic upgrade head)."
+                    "Dev database is missing tables %s — creating schema via "
+                    "SQLAlchemy metadata (for production use: alembic upgrade head).",
+                    ", ".join(sorted(missing_tables)),
                 )
                 async with async_engine.begin() as conn:
                     await conn.run_sync(Base.metadata.create_all)
         except Exception as exc:
             logger.error("Dev database schema check failed: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Analysis workflow runner (in-process, bounded)
+    # ------------------------------------------------------------------
+    # Stage 5 runs workflows as FastAPI background tasks in the web process.
+    # A durable queue/worker is a later-stage concern (see docs/decisions.md).
+    try:
+        from app.db.base import async_session_factory
+
+        app.state.workflow_runner = WorkflowRunner(async_session_factory)
+        recovered = await recover_stale_workflows(async_session_factory)
+        if recovered:
+            logger.warning(
+                "Marked %d interrupted analysis workflow(s) as failed (retryable).",
+                recovered,
+            )
+    except Exception as exc:
+        logger.error(
+            "Analysis workflow runner initialisation failed: %s", type(exc).__name__
+        )
+        app.state.workflow_runner = None
 
     yield  # ← application runs here
 
@@ -140,9 +185,16 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------
     # CORS
     # -------------------------------------------------------------------
+    # In development, accept any localhost/127.0.0.1 port so the frontend works
+    # when Next.js falls back to 3001+ (a very common "Failed to fetch" cause).
+    dev_origin_regex = r"^http://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"
+    cors_origin_regex = settings.cors_origin_regex or (
+        None if settings.is_production else dev_origin_regex
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        allow_origin_regex=cors_origin_regex,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -199,6 +251,13 @@ def create_app() -> FastAPI:
     app.include_router(auth_router.router, prefix=API_PREFIX)
     app.include_router(cases_router.router, prefix=API_PREFIX)
     app.include_router(documents_router.router, prefix=API_PREFIX)
+    app.include_router(analysis_router.router, prefix=API_PREFIX)
+    app.include_router(ai_router.router, prefix=API_PREFIX)
+
+    # Convenience alias for probes/tools that expect /health at the root.
+    @app.get("/health", include_in_schema=False)
+    async def root_health():
+        return await health_router.health()
 
     return app
 

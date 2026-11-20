@@ -4,6 +4,7 @@
 
 ```bash
 # From apps/api/
+# Python 3.13 is required for the pinned LangGraph/langsmith stack.
 python -m venv .venv
 
 # Windows:
@@ -22,6 +23,22 @@ API is now available at:
 - **Readiness:** http://localhost:8000/api/v1/ready
 - **Docs:** http://localhost:8000/docs
 - **OpenAPI:** http://localhost:8000/openapi.json
+
+## Stage 5 analysis endpoints
+
+All require `Authorization: Bearer <token>` and case ownership.
+
+```
+POST /api/v1/cases/{case_id}/analysis                    → 202 queued workflow
+GET  /api/v1/cases/{case_id}/analysis                    → recent runs
+GET  /api/v1/cases/{case_id}/analysis/{workflow_id}      → status/result
+POST /api/v1/cases/{case_id}/analysis/{workflow_id}/retry
+GET  /api/v1/ai/status                                   → provider/model (no key)
+```
+
+Configure the provider with `AI_PROVIDER`, `AI_MODEL`, `AI_API_KEY`, and
+`AI_BASE_URL`. With no key outside production, the API uses a clearly-labelled
+deterministic fixture; it never claims that a model was called.
 
 ## Running tests
 

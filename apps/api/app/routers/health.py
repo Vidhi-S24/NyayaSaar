@@ -52,21 +52,26 @@ async def _make_health(*, include_service_checks: bool = False) -> HealthRespons
         if db_status.status != "ok":
             overall = "degraded"
 
-        # Redis
+        # Redis — configured for future background jobs, not used in Stage 5
         if settings.redis_configured:
             services["redis"] = HealthServiceStatus(
-                status="ok", message="Not yet probed (background jobs staged)"
+                status="degraded",
+                message=(
+                    "Configured but not used in Stage 5; analysis runs in-process "
+                    "and Redis/Celery is deferred (D-029). Connectivity not probed."
+                ),
             )
         else:
             services["redis"] = HealthServiceStatus(
                 status="unavailable",
-                message="REDIS_URL not configured; optional until background jobs are needed",
+                message="REDIS_URL not configured; optional until a durable queue is added",
             )
 
         # Neo4j
         if settings.neo4j_configured:
             services["neo4j"] = HealthServiceStatus(
-                status="ok", message="Not yet probed (citation graph staged)"
+                status="degraded",
+                message="Configured but not used yet; connectivity not probed",
             )
         else:
             services["neo4j"] = HealthServiceStatus(
@@ -74,15 +79,24 @@ async def _make_health(*, include_service_checks: bool = False) -> HealthRespons
                 message="NEO4J_URI not configured; optional for citation graph features",
             )
 
-        # Gemini
-        if settings.gemini_configured:
-            services["gemini"] = HealthServiceStatus(
-                status="ok", message="API key present; connectivity not probed"
+        # AI provider (provider-agnostic; never exposes the key)
+        provider = settings.ai_provider
+        if settings.ai_configured:
+            services["ai"] = HealthServiceStatus(
+                status="ok",
+                message=(
+                    f"Provider '{provider}' configured; connectivity not probed. "
+                    "Fixture mode is labelled at /api/v1/ai/status."
+                ),
             )
         else:
-            services["gemini"] = HealthServiceStatus(
+            services["ai"] = HealthServiceStatus(
                 status="unavailable",
-                message="GEMINI_API_KEY not configured; required for AI features",
+                message=(
+                    f"No credentials for AI provider '{provider}'; AI features "
+                    "will use the labelled development fixture (non-production) "
+                    "or report unavailable in production."
+                ),
             )
 
     return HealthResponse(

@@ -43,6 +43,13 @@ class Settings(BaseSettings):
         default=["http://localhost:3000"],
         description="Comma-separated list of allowed frontend origins.",
     )
+    cors_origin_regex: str = Field(
+        default="",
+        description=(
+            "Optional regex of allowed frontend origins. In development, "
+            "localhost/127.0.0.1 on any port is allowed by default."
+        ),
+    )
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -52,15 +59,87 @@ class Settings(BaseSettings):
         return v
 
     # -----------------------------------------------------------------------
-    # Gemini AI (server-side only)
+    # AI provider (server-side only, provider-agnostic)
     # -----------------------------------------------------------------------
+    # AI_PROVIDER selects the adapter; AI_MODEL selects the model. Agent code
+    # depends only on the LLMProvider interface, so switching providers/models
+    # requires no application-code changes.
+    ai_provider: Literal[
+        "gemini", "openai", "openai_compatible", "anthropic", "mock"
+    ] = Field(
+        default="gemini",
+        description=(
+            "LLM adapter: gemini | openai | openai_compatible | anthropic | mock. "
+            "Use openai_compatible for Groq, OpenRouter, Together, Ollama, etc."
+        ),
+    )
+    ai_model: str = Field(
+        default="",
+        description=(
+            "Model identifier for the selected provider. If empty, a provider "
+            "default is used (or GEMINI_MODEL_ID for the Gemini adapter)."
+        ),
+    )
+    ai_api_key: str = Field(
+        default="",
+        description="API key for the selected provider. Never exposed to clients.",
+    )
+    ai_base_url: str = Field(
+        default="",
+        description=(
+            "Optional base URL. Required for openai_compatible providers; "
+            "optional override for OpenAI/Anthropic-compatible gateways."
+        ),
+    )
+    ai_timeout_s: float = Field(
+        default=45.0,
+        gt=0,
+        description="Per-request provider timeout in seconds.",
+    )
+    ai_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Transport-level retries for timeouts, 429s, and 5xx errors.",
+    )
+    ai_structured_retries: int = Field(
+        default=1,
+        ge=0,
+        le=2,
+        description="Repair attempts when the model returns invalid structured output.",
+    )
+    ai_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    ai_max_output_tokens: int = Field(default=4096, ge=256, le=32768)
+    ai_json_mode: Literal["none", "json_object", "json_schema"] = Field(
+        default="json_object",
+        description=(
+            "Structured-output mode for OpenAI-compatible providers. "
+            "Use 'none' for providers that reject response_format."
+        ),
+    )
+    ai_allow_mock: bool | None = Field(
+        default=None,
+        description=(
+            "Allow the clearly-labelled development fixture provider when no "
+            "API key is configured. Defaults to true outside production."
+        ),
+    )
+    ai_gemini_native_schema: bool = Field(
+        default=True,
+        description=(
+            "Pass a native response schema to Gemini. Disable if the selected "
+            "model does not support structured output."
+        ),
+    )
+
+    # Backwards-compatible Gemini variables (used when AI_PROVIDER=gemini).
     gemini_api_key: str = Field(
         default="",
-        description="Google Gemini API key. Required for AI features.",
+        description="Google Gemini API key. Used if AI_API_KEY is empty.",
     )
     gemini_model_id: str = Field(
-        default="gemini-2.0-flash-001",
-        description="Gemini model identifier; configurable without code changes.",
+        default="gemini-2.5-flash",
+        description="Gemini model identifier; used if AI_MODEL is empty.",
     )
 
     # -----------------------------------------------------------------------
@@ -111,7 +190,15 @@ class Settings(BaseSettings):
     # -----------------------------------------------------------------------
     max_upload_size_mb: int = 50
     max_documents_per_case: int = 100
+    max_analysis_focus_chars: int = 1000
+
+    # Agent execution budgets (bounded, auditable workflows)
     agent_execution_timeout_s: int = 120
+    agent_max_llm_calls: int = 3
+    agent_max_input_chars: int = 24_000
+    agent_max_total_tokens: int = 80_000
+    agent_max_verifier_retries: int = 1
+    agent_max_workflow_attempts: int = 2
 
     # -----------------------------------------------------------------------
     # Derived helpers
@@ -121,8 +208,45 @@ class Settings(BaseSettings):
         return self.app_env == "production"
 
     @property
-    def gemini_configured(self) -> bool:
-        return bool(self.gemini_api_key)
+    def effective_ai_api_key(self) -> str:
+        if self.ai_api_key:
+            return self.ai_api_key
+        if self.ai_provider == "gemini":
+            return self.gemini_api_key
+        return ""
+
+    @property
+    def effective_ai_model(self) -> str:
+        if self.ai_model:
+            return self.ai_model
+        if self.ai_provider == "gemini" and self.gemini_model_id:
+            return self.gemini_model_id
+        defaults = {
+            "gemini": "gemini-2.5-flash",
+            "openai": "gpt-4.1-mini",
+            "anthropic": "claude-sonnet-4-5",
+            "openai_compatible": "",
+            "mock": "fixture",
+        }
+        return defaults.get(self.ai_provider, "")
+
+    @property
+    def ai_mock_allowed(self) -> bool:
+        if self.ai_allow_mock is not None:
+            return self.ai_allow_mock
+        return not self.is_production
+
+    @property
+    def ai_configured(self) -> bool:
+        """True when a real provider can be constructed from configuration."""
+        if self.ai_provider == "mock":
+            return True
+        if self.effective_ai_api_key:
+            return True
+        # Local OpenAI-compatible servers (Ollama, LM Studio) often need no key.
+        if self.ai_provider == "openai_compatible" and self.ai_base_url:
+            return True
+        return False
 
     @property
     def database_configured(self) -> bool:

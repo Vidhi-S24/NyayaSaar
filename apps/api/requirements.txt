@@ -3,7 +3,6 @@ uvicorn>=0.32.0,<0.33.0
 pydantic>=2.9.0,<3.0.0
 pydantic-settings>=2.6.0,<3.0.0
 email-validator>=2.2.0,<3.0.0
-pydantic-settings>=2.5.0,<3.0.0
 python-multipart>=0.0.12
 python-dotenv>=1.0.0
 httpx>=0.27.0
@@ -21,11 +20,15 @@ psycopg[binary]>=3.1.0,<4.0.0
 bcrypt>=4.0.0,<6.0.0
 pyjwt[crypto]>=2.9.0,<3.0.0
 
-# AI / Agents (staged)
-# google-genai>=1.0.0
-# langgraph>=0.2.0
-# langchain>=0.3.0
-# langchain-google-genai>=2.0.0
+# AI / Agents (Stage 5)
+# Python 3.13 is required for this stack in the local/dev environment.
+# google-genai is the official Google Gen AI SDK (Gemini adapter only).
+google-genai>=1.0.0,<2.0.0
+langgraph==0.6.11
+langchain-core==0.3.79
+# Pinned deliberately for compatibility with the current graph stack and the
+# local Windows environment. Do not bump without running the full test suite.
+langsmith==0.3.45
 
 # Documents (Stage 4)
 PyMuPDF>=1.24.0,<1.26.0
@@ -38,4 +41,4 @@ python-docx>=1.1.0,<2.0.0
 # neo4j>=5.24.0
 
 # Observability (optional)
-# langsmith>=0.1.0
+# langsmith is pinned above for the LangGraph stack (Stage 5).

@@ -11,10 +11,12 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.ai.providers.mock import MockProvider
 from app.config import get_settings
 from app.db.base import Base
 from app.db.session import get_async_session
 from app.main import create_app
+from app.services.analysis import WorkflowRunner
 from app.services.auth import hash_password
 
 
@@ -50,13 +52,13 @@ async def test_session(test_engine):
 
 
 # ---------------------------------------------------------------------------
-# FastAPI test client using test DB
+# FastAPI test app + client using test DB
 # ---------------------------------------------------------------------------
 
 
 @pytest_asyncio.fixture(scope="function")
-async def client(test_engine):
-    """AsyncClient with the FastAPI app wired to the test SQLite DB."""
+async def test_app(test_engine):
+    """FastAPI app wired to the test DB and a deterministic fixture provider."""
     factory = sessionmaker(
         bind=test_engine,
         class_=AsyncSession,
@@ -80,8 +82,21 @@ async def client(test_engine):
     app = create_app()
     app.dependency_overrides[get_async_session] = override_get_session
 
+    # Stage 5: workflows are normally scheduled by the lifespan runner. Tests
+    # wire an equivalent runner against the in-memory DB and the clearly
+    # labelled fixture provider (no network calls).
+    app.state.workflow_runner = WorkflowRunner(
+        factory,
+        provider_factory=lambda settings: MockProvider(model="fixture"),
+    )
+    app.state.test_session_factory = factory
+    return app
+
+
+@pytest_asyncio.fixture(scope="function")
+async def client(test_app):
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=test_app), base_url="http://test"
     ) as ac:
         yield ac
 

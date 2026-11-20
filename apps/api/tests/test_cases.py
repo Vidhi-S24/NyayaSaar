@@ -186,7 +186,7 @@ async def test_user_cannot_delete_other_users_case(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_cases_requires_auth(client: AsyncClient):
     resp = await client.get("/api/v1/cases")
-    assert resp.status_code == 403
+    assert resp.status_code == 401
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 # NyayaSaar — Architecture
 
-> Last updated: Stage 4 — Document Ingestion Pipeline
+> Last updated: Stage 5 — Provider-agnostic AI and LangGraph case analysis
 
 ---
 
@@ -31,29 +31,31 @@ NyayaSaar is a multi-agent legal case intelligence platform with a clear separat
 │  apps/api — FastAPI + LangGraph                                │
 │                                                                │
 │  ┌─────────────────┐   ┌─────────────────────────────────┐   │
-│  │  FastAPI routes │   │  LangGraph workflows             │   │
-│  │  /api/v1/*      │──▶│  (stateful agent orchestration) │   │
-│  │  Pydantic I/O   │   │                                 │   │
-│  │  Auth (Stage 3) │   │  Nodes (staged):                │   │
-│  └─────────────────┘   │  • Case Analyst                 │   │
-│                         │  • Evidence Analyst             │   │
-│  Background (optional)  │  • Legal Research Agent         │   │
-│  apps/worker (Stage 5+) │  • Precedent Analyst            │   │
-│  Celery + Redis         │  • Argument Analyst             │   │
-│                         │  • Verifier/Report Agent        │   │
-│                         └──────────────┬────────────────┘   │
-└──────────────────────────┬─────────────┼─────────────────────┘
+│  │  FastAPI routes │   │  LangGraph case-analysis graph   │   │
+│  │  /api/v1/*      │──▶│  orchestrator → analyst →        │   │
+│  │  Pydantic I/O   │   │  deterministic verifier → final  │   │
+│  │  Auth (Stage 3) │   │  (bounded retries/timeouts)      │   │
+│  └─────────────────┘   └──────────────┬──────────────────┘   │
+│                                       │                      │
+│  Background (Stage 5)                 │ LLMProvider interface│
+│  in-process workflow runner           ▼                      │
+│  (Celery/Redis deferred — D-029)  ┌──────────────────────┐   │
+│                                   │ Gemini | OpenAI |    │   │
+│                                   │ Anthropic | compat. | │   │
+│                                   │ mock (fixture)       │   │
+│                                   └──────────────────────┘   │
+└──────────────────────────┬───────────────────────────────────┘
                            │             │
           ┌────────────────┘             └──────────────────┐
           │                                                 │
           ▼                                                 ▼
-┌─────────────────────┐                      ┌─────────────────────┐
-│  PostgreSQL          │                      │  Google Gemini API   │
-│  + pgvector          │                      │  (server-side key)   │
-│  SQLAlchemy/Alembic  │                      │  Configurable model  │
-│  Hybrid retrieval    │                      └─────────────────────┘
-│  Full-text search    │
-└─────────────────────┘
+┌─────────────────────┐                      ┌─────────────────────────┐
+│  PostgreSQL          │                      │  AI provider (server)    │
+│  + pgvector          │                      │  Gemini (default) |      │
+│  SQLAlchemy/Alembic  │                      │  OpenAI | Anthropic |    │
+│  Hybrid retrieval    │                      │  OpenAI-compatible |     │
+│  Full-text search    │                      │  labelled fixture        │
+└─────────────────────┘                      └─────────────────────────┘
           │
           ├── Neo4j (optional)
           │   Citation graph features
@@ -81,27 +83,131 @@ Browser
   → Frontend polls /api/v1/documents/{id}/status
 ```
 
-### Legal analysis workflow
+### Legal analysis workflow (Stage 5)
 
 ```
 Browser
-  → POST /api/v1/analysis/run (case_id, workflow_type, parameters)
-  → FastAPI creates WorkflowRun record, returns run_id
-  → LangGraph workflow executes:
-      [Case Analyst]
-        ↓ typed state
-      [Evidence Analyst]
-        ↓
-      [Legal Research Agent] → searches configured legal corpus
-        ↓
-      [Precedent Analyst]
-        ↓
-      [Verifier/Report Agent] → checks source citations
-        ↓
-      structured report saved to DB
-  → Frontend polls /api/v1/analysis/{run_id}/status
-  → GET /api/v1/analysis/{run_id}/report → source-linked findings
+  → POST /api/v1/cases/{case_id}/analysis   {document_ids?, focus?}
+  → FastAPI verifies case ownership, creates a queued workflow_runs row
+  → returns 202 + workflow_id (no long synchronous request)
+  → FastAPI BackgroundTasks invokes the bounded runner
+      → load ready DocumentChunk pages (bounded character budget)
+      → LangGraph:
+          orchestrator ──(no usable sources)──────────────→ finalize
+               │
+               └→ case_analyst (LLMProvider, structured JSON)
+                       │
+                       └→ verifier (deterministic, no model call)
+                              ├─ unsupported/partial + budget left → case_analyst
+                              └─ verified / budget exhausted → finalize
+      → verified result + steps + token usage saved to workflow_runs
+  → Frontend polls GET /api/v1/cases/{case_id}/analysis/{workflow_id}
+  → Result includes document_id + page_number for every source reference
+  → Failed runs can be re-queued with POST .../analysis/{workflow_id}/retry
 ```
+
+---
+
+## Stage 5 — Provider-agnostic AI and LangGraph case analysis
+
+### Provider layer (`apps/api/app/ai/`)
+
+```
+LLMProvider (ABC)
+  ├── GeminiProvider            official google-genai SDK
+  ├── OpenAICompatibleProvider  POST {AI_BASE_URL}/chat/completions
+  │                             (OpenAI, Groq, OpenRouter, Together,
+  │                              DeepSeek, Ollama, LM Studio, gateways)
+  ├── AnthropicProvider         POST {base}/v1/messages
+  └── MockProvider              labelled development fixture (no network)
+
+get_provider(settings) selects the adapter from AI_PROVIDER / AI_MODEL /
+AI_API_KEY / AI_BASE_URL. Agent nodes import only LLMProvider.
+```
+
+`generate_structured()` owns the reliability policy: per-request timeout,
+bounded transport retries (timeouts/429/5xx), bounded structured-output repair,
+Pydantic validation, token accounting, and sanitised errors. Vendor exception
+text is never surfaced or logged.
+
+### Workflow data model (Alembic migration `003`)
+
+```
+workflow_runs
+────────────────────────────────────────────
+id (uuid str) PK
+case_id → cases.id            user_id → users.id
+workflow_type (case_analysis)
+status: queued | running | completed | failed
+progress (0–100), current_step
+provider, model, is_mock      ← safe metadata, never the key
+input_payload (JSON)          ← document_ids, focus
+result (JSON)                 ← verified CaseAnalysisResult
+steps (JSON)                  ← bounded progress history
+token_usage (JSON)
+error_code, error_message     ← sanitised, no prompts/document text
+attempt_count, started_at, completed_at
+created_at / updated_at
+```
+
+### Graph state and nodes (`apps/api/app/agents/`)
+
+```
+CaseAnalysisState (TypedDict, JSON-serialisable)
+  identity: workflow_id, case_id, started_at
+  inputs:   case_context, sources[], source_notes[]
+  provider: provider_name, model_name, is_mock
+  outputs:  draft, result
+  control:  status, current_step, progress, outcome, errors, notes
+  budgets:  retry_count, needs_revision, verification_feedback,
+            llm_calls, token_usage, token_budget_exhausted
+```
+
+- **orchestrator** — no model call; routes to the analyst or returns an honest
+  insufficient-source result.
+- **case_analyst** — builds a prompt from sanitised source excerpts, calls the
+  configured provider, validates `CaseAnalysisDraft`, enforces call/token budgets.
+- **verifier** — no model call; resolves `S1` markers to real documents/pages,
+  checks quotes, classifies support, counts invalid refs, flags authority-like
+  strings, and requests at most one bounded revision.
+- **finalize** — always produces a result or a sanitised failure; never leaves a
+  run silently incomplete.
+
+### API surface (all authenticated, case-ownership enforced)
+
+```
+POST /api/v1/cases/{case_id}/analysis                  → 202 queued run
+GET  /api/v1/cases/{case_id}/analysis                  → recent runs
+GET  /api/v1/cases/{case_id}/analysis/{workflow_id}    → status/result
+POST /api/v1/cases/{case_id}/analysis/{workflow_id}/retry → 202 re-queued
+GET  /api/v1/ai/status                                 → safe provider metadata
+```
+
+### Frontend
+
+The case workspace adds an **Analysis** tab (`components/analysis/analysis-panel.tsx`)
+that starts a run, polls progress, shows provider/fixture status, displays the
+structured result grouped into facts, legal issues, timeline, inferences,
+unverified hypotheses, missing information, limitations, and verification
+notes, and opens the exact cited document page in a source viewer.
+
+### Security and honesty controls
+
+- API keys are server-side only and never returned by `/ai/status` or stored in
+  `workflow_runs`.
+- Document text is untrusted: wrapped in `<untrusted_document>`, structural tags
+  escaped, and explicitly described as evidence rather than instructions.
+- The Stage 5 analyst is forbidden from citing statutes/cases because no legal
+  authority corpus is connected. Citation-like strings are flagged for review.
+- Fixture output is labelled in the API (`is_mock`), the UI, and the limitations.
+- Every claim carries a source support status; unsupported claims are surfaced.
+
+### Deferred to later stages
+
+- Durable queue/worker (Celery/Redis) and cross-restart LangGraph checkpoint resume.
+- Hybrid retrieval, embeddings/pgvector search, authority corpus, contradictions,
+  precedent analysis, advocate/judge modules.
+- Real-provider smoke tests in CI (requires a key and network access).
 
 ---
 
@@ -210,16 +316,16 @@ Every protected route → get_current_user dependency → 401/403 on failure
 
 | Provider | Data sent | Retention | Configurable? |
 |---|---|---|---|
-| Google Gemini API | Document chunks, legal queries | Per Google's data policies | Model ID + key configurable |
-| PostgreSQL (Render) | All structured data | Persistent, managed by operator | DATABASE_URL |
+| Selected AI provider (Gemini default; OpenAI/Anthropic/compatible optional) | Bounded document excerpts, case metadata, focus | Per provider's data policies | `AI_PROVIDER`, `AI_MODEL`, `AI_BASE_URL`, key |
+| PostgreSQL (Render) | All structured data, workflow runs/results | Persistent, managed by operator | DATABASE_URL |
 | Neo4j (optional) | Citation relationships | Persistent | NEO4J_URI |
-| Redis (optional) | Job payloads (transient) | Ephemeral | REDIS_URL |
-| LangSmith (optional) | LLM traces | Per LangSmith policy | LANGSMITH_API_KEY |
+| Redis (optional, not used in Stage 5) | Job payloads (transient) | Ephemeral | REDIS_URL |
+| LangSmith (optional) | LLM traces, if explicitly enabled | Per LangSmith policy | LANGSMITH_API_KEY |
 
 **Privacy principles:**
 - Raw legal documents are not logged in plaintext.
 - Sensitive personal data is not logged unnecessarily.
-- Gemini API key is never exposed to the browser bundle.
+- AI API keys are never exposed to the browser bundle, API responses, workflow rows, or logs.
 - All AI outputs are explicitly marked as requiring professional verification.
 
 ---
@@ -264,7 +370,7 @@ See [decisions.md](decisions.md) for the rationale behind technology choices.
 | 2 ✅ | Premium UI | Full dashboard, case workspace, design system |
 | 3 ✅ | Database + Auth | PostgreSQL, Alembic, JWT authentication, ownership authorisation, live case CRUD |
 | 4 ✅ | Document ingestion | Upload, validation, extraction, chunking, storage abstraction, frontend UI |
-| 5 | Agentic workflows | LangGraph nodes, Gemini integration, embedding, hybrid retrieval |
-| 6 | Legal analysis | All five intelligence modules, retrieval |
+| 5 ✅ | Agentic workflows | Provider-agnostic AI layer, LangGraph case analysis, deterministic verifier, persisted runs, analysis UI |
+| 6 | Legal analysis | Full case intelligence, hybrid retrieval, contradictions, precedents, advocate/judge modules |
 | 7 | Evaluation + deploy | LangSmith, RAGAS, Render/Vercel config, CI |
 

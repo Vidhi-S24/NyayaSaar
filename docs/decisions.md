@@ -198,3 +198,71 @@
 **Decision:** After extracting a PDF page, if the extracted character count is below a threshold (< 50 chars per page on average) the document is flagged as `processing_status = "ocr_required"` rather than `completed`. A `processing_notes` field explains the situation.
 **Rationale:** PyMuPDF cannot extract text from image-only PDFs — it returns empty strings. Rather than silently returning an empty extraction (which would be misleading to legal researchers), the platform explicitly reports that the document appears to be scanned and requires OCR. This is honest and actionable. OCR integration (Tesseract or EasyOCR) is an extension point for a future stage.
 **Consequence:** Scanned documents show a clear "OCR required" status in the UI. Users are not misled into thinking the document was analysed.
+
+---
+
+## Stage 5 — Provider-agnostic AI and LangGraph case analysis
+
+### D-024: One `LLMProvider` interface; provider/model swaps are environment-only
+
+**Date:** Stage 5
+**Decision:** Agent nodes depend only on `app.ai.base.LLMProvider` and call `generate_structured(StructuredRequest)`. Adapters exist for `gemini` (official Google Gen AI SDK), `openai`, `openai_compatible` (Groq/OpenRouter/Together/Ollama/LM Studio/Azure-compatible), `anthropic`, and `mock` (development fixture). Selection is by `AI_PROVIDER`, `AI_MODEL`, `AI_API_KEY`, and `AI_BASE_URL`.
+**Rationale:** The user requirement is that changing the AI provider or model must require only a key/model change, not agent-code changes. Keeping vendor SDK imports inside adapters and Pydantic schemas inside the shared contract makes that true: the graph has no Gemini-specific code.
+**Consequence:** Adding another vendor means writing one adapter class and registering it; prompts, verifier, graph, persistence, and API remain unchanged.
+
+### D-025: Gemini uses the official Google Gen AI SDK; keys stay server-side
+
+**Date:** Stage 5
+**Decision:** The Gemini adapter imports `google.genai` and constructs `genai.Client(api_key=...)` only on the server. No key is ever returned by `/api/v1/ai/status`, written to workflow rows, or logged.
+**Rationale:** Matches the project requirement and avoids a second-hand HTTP reimplementation of Gemini. Status exposes only provider, model, configured flag, and a safe message.
+**Limitation:** No real Gemini key was available in this environment, so the adapter is covered by an injected fake SDK client and the OpenAI/Anthropic adapters by `httpx.MockTransport`. A live smoke test remains a deployment step.
+
+### D-026: Structured output is validated before it reaches the graph
+
+**Date:** Stage 5
+**Decision:** Every model call returns a Pydantic-validated object (`CaseAnalysisDraft`). Invalid JSON gets a bounded repair attempt (`AI_STRUCTURED_RETRIES`, default 1). Transport failures get bounded retries (`AI_MAX_RETRIES`, default 2) for timeouts, 429s, and 5xx only. Auth/400 errors are not retried.
+**Rationale:** Legal output cannot be parsed optimistically. Validation happens in the provider layer so every adapter behaves identically. Repair prompts contain only a generic instruction, never raw document text or vendor error details.
+**Consequence:** `ProviderResponseError(code="invalid_model_output")` is a recoverable workflow failure the user can retry.
+
+### D-027: Source markers (`S1`, `S2`, ...) instead of document UUIDs in prompts
+
+**Date:** Stage 5
+**Decision:** Source excerpts are numbered per run and the model must cite `source_id` markers plus a short quote. The verifier maps markers back to real `document_id`/`page_number` pairs before results are stored or shown.
+**Rationale:** Models are unreliable at reproducing UUIDs. Markers remove a common hallucination path while preserving exact source traceability. The verifier also rejects invented markers and quotes that are not real substrings of the cited page.
+**Consequence:** Every displayed source reference is derived from the server's own excerpt list, not from model-supplied identifiers.
+
+### D-028: Deterministic verifier node (no second LLM)
+
+**Date:** Stage 5
+**Decision:** The verifier node performs no model call. It validates source IDs, checks quotes against normalised page text, classifies each claim as `supported`, `partially_supported`, or `unsupported`, counts invalid references, and flags citation-like strings. Unsupported/partial claims trigger at most `AGENT_MAX_VERIFIER_RETRIES` (default 1) analyst revision.
+**Rationale:** A second model cannot reliably police the first. Deterministic checks are auditable, cheap, and testable. Unsupported claims are surfaced rather than silently deleted.
+**Consequence:** The UI shows the verification counts and the exact page for every cited claim. The result explicitly states that no external authority database was consulted.
+
+### D-029: `workflow_runs` table + in-process background runner (no Celery/Redis yet)
+
+**Date:** Stage 5
+**Decision:** A new `workflow_runs` table (migration `003`) stores status, progress, steps, provider metadata, input, token usage, sanitised error, and the verified result. `POST /api/v1/cases/{id}/analysis` creates a queued row and schedules a bounded runner via FastAPI `BackgroundTasks`. Clients poll `GET .../analysis/{workflow_id}`. On startup, interrupted `queued`/`running` rows are marked failed with `interrupted_by_restart` and can be retried.
+**Rationale:** Keeps Stage 5 deployable on the existing single Render web service. Workflows are bounded by `AGENT_EXECUTION_TIMEOUT_S` (120 s), call budgets, token budgets, and attempt limits. Persisting state means a completed result survives a restart and failures are recoverable.
+**Limitation:** The runner is not a durable queue: a process crash loses the in-flight task (the row is recovered as failed on next startup). LangGraph uses an in-process `MemorySaver`; true cross-restart graph resume is deferred. Move to Celery/Redis or a managed queue when concurrent analysis volume or long OCR jobs require it.
+**Alternatives considered:** Celery + Redis now (infrastructure cost/complexity before demonstrated need), synchronous request execution (timeouts and poor UX), Vercel functions (timeout limits).
+
+### D-030: Development fixture mode is explicit and can be disabled
+
+**Date:** Stage 5
+**Decision:** When no provider key is configured outside production, the API uses a deterministic `MockProvider` that returns source-linked fixture content. Every result carries `is_mock: true`, the UI shows a "Development fixture — no AI model was called" badge, and limitations say so. In production the fixture is disabled unless `AI_ALLOW_MOCK=true` is set deliberately.
+**Rationale:** Local development and automated tests must exercise the real graph, verifier, persistence, and UI without credentials, but fixture output must never be mistaken for legal analysis.
+**Consequence:** A missing key is visible and honest rather than a silent failure or fabricated "AI" output.
+
+### D-031: Prompt-injection defence treats all document text as untrusted evidence
+
+**Date:** Stage 5
+**Decision:** Source text is wrapped in `<untrusted_document>` tags, control characters are removed, and any structural wrapper tags inside the text are escaped. The system prompt states that document text is evidence, never instructions, and that any embedded instruction must be ignored and noted as a limitation. The model is forbidden from citing external statutes/cases in Stage 5 because no authority corpus is available.
+**Rationale:** Uploaded PDFs/DOCX/TXT are attacker-controlled in a multi-user product. This is defence-in-depth: prompts cannot fully prevent injection, so the verifier and deterministic source checks also constrain what can appear as a supported claim.
+**Limitation:** Prompt injection is mitigated, not solved. Stage 6 retrieval and authority handling need the same treatment plus provenance checks.
+
+### D-032: Pinned LangGraph/langsmith stack and Python 3.13
+
+**Date:** Stage 5
+**Decision:** Pin `langgraph==0.6.11`, `langchain-core==0.3.79`, `langsmith==0.3.45`, and `google-genai>=1.0,<2.0`; run the backend on Python 3.13.17 in this environment.
+**Rationale:** Python 3.15 had no compatible wheels for parts of the graph stack (`zstandard` tried a source build with no MSVC), and a newer langsmith/xxhash combination was blocked by the local Windows Application Control policy. The pinned set imports and runs cleanly; 127 backend tests pass.
+**Consequence:** Do not bump these pins casually. Re-run the full backend suite and a live provider smoke test before changing them.

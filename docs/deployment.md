@@ -1,6 +1,6 @@
 # NyayaSaar — Deployment Guide
 
-> Last updated: Stage 4 — Document Ingestion Pipeline
+> Last updated: Stage 5 — Provider-agnostic AI and LangGraph case analysis
 
 ---
 
@@ -22,7 +22,7 @@
 
 - Node.js ≥ 20
 - pnpm ≥ 9 (`npm install -g pnpm`)
-- Python ≥ 3.11
+- Python 3.13 (required for the pinned LangGraph stack in this project)
 - PostgreSQL (optional for local development — see below)
 
 ### Database options for local development
@@ -118,14 +118,31 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 | Variable | Required | Notes |
 |---|---|---|
 | `APP_ENV` | Yes | Set to `production` |
+| `PYTHON_VERSION` | Yes (Render) | `3.13.17` — required by the pinned LangGraph/langsmith stack |
 | `APP_SECRET_KEY` | Yes | Random 32-char hex string |
 | `JWT_SECRET_KEY` | Yes (Stage 3) | Separate secret for JWTs (falls back to `APP_SECRET_KEY`) |
 | `CORS_ORIGINS` | Yes | Your Vercel frontend URL |
-| `GEMINI_API_KEY` | For AI features | Google AI Studio key |
-| `GEMINI_MODEL_ID` | No | Defaults to `gemini-2.0-flash-001` |
+| `AI_PROVIDER` | For AI features | `gemini` (default), `openai`, `openai_compatible`, `anthropic`, `mock` |
+| `AI_MODEL` | No | Model ID for the selected provider; empty uses a provider default |
+| `AI_API_KEY` | For real AI | Provider key (server-side only). Never expose to Vercel/browser |
+| `AI_BASE_URL` | If compatible | Required for `openai_compatible`; optional gateway override |
+| `AI_TIMEOUT_S` | No | Per-request timeout (default 45) |
+| `AI_MAX_RETRIES` | No | Transport retries for timeout/429/5xx (default 2) |
+| `AI_STRUCTURED_RETRIES` | No | JSON repair attempts (default 1) |
+| `AI_MAX_OUTPUT_TOKENS` | No | Output cap (default 4096) |
+| `AI_JSON_MODE` | No | `json_object` (default), `json_schema`, or `none` |
+| `AI_ALLOW_MOCK` | No | Must be explicitly `true` to allow fixture mode in production |
+| `GEMINI_API_KEY` | Legacy | Used only when `AI_PROVIDER=gemini` and `AI_API_KEY` is empty |
+| `GEMINI_MODEL_ID` | Legacy | Used only when `AI_PROVIDER=gemini` and `AI_MODEL` is empty |
+| `AGENT_EXECUTION_TIMEOUT_S` | No | Whole-workflow timeout (default 120) |
+| `AGENT_MAX_LLM_CALLS` | No | Model-call budget per run (default 3) |
+| `AGENT_MAX_INPUT_CHARS` | No | Source excerpt budget (default 24000) |
+| `AGENT_MAX_TOTAL_TOKENS` | No | Token budget per run (default 80000) |
+| `AGENT_MAX_VERIFIER_RETRIES` | No | Analyst revisions after verification (default 1) |
+| `AGENT_MAX_WORKFLOW_ATTEMPTS` | No | Manual retry limit per run (default 2) |
 | `DATABASE_URL` | Yes (Stage 3) | Async asyncpg URL (Render internal database URL + `+asyncpg`) |
 | `DATABASE_SYNC_URL` | Yes (Stage 3) | Sync psycopg-3 URL for Alembic |
-| `REDIS_URL` | From Stage 5 | Redis connection URL |
+| `REDIS_URL` | Not used in Stage 5 | Reserved for a durable queue (D-029) |
 | `NEO4J_URI` | Optional | Neo4j for citation graphs |
 | `NEO4J_USER` | Optional | Neo4j username |
 | `NEO4J_PASSWORD` | Optional | Neo4j password |
@@ -137,6 +154,40 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 | `AWS_SECRET_ACCESS_KEY` | If `s3` | S3 credentials |
 | `MAX_UPLOAD_SIZE_MB` | No | Per-file size limit in MB (default `50`) |
 | `MAX_DOCUMENTS_PER_CASE` | No | Hard cap per case (default `50`) |
+
+### AI provider configuration and smoke test
+
+Provider/model changes require no code changes:
+
+```bash
+# Gemini (default, official google-genai SDK)
+AI_PROVIDER=gemini
+AI_MODEL=gemini-2.5-flash
+AI_API_KEY=...
+
+# OpenAI
+AI_PROVIDER=openai
+AI_MODEL=gpt-4.1-mini
+AI_API_KEY=...
+
+# Groq / OpenRouter / Together / Ollama / LM Studio
+AI_PROVIDER=openai_compatible
+AI_BASE_URL=https://api.groq.com/openai/v1
+AI_MODEL=llama-3.3-70b-versatile
+AI_API_KEY=...
+
+# Anthropic
+AI_PROVIDER=anthropic
+AI_MODEL=claude-sonnet-4-5
+AI_API_KEY=...
+```
+
+After deploy:
+
+1. `GET /api/v1/ai/status` (authenticated) must report `is_mock: false`, the expected provider/model, and `configured: true`.
+2. Upload a small TXT/PDF with known text, open the case **Analysis** tab, run it, and confirm every fact cites the real document/page and the result says `is_mock: false`.
+3. If `is_mock: true` appears, the key is missing or invalid for the selected provider. Do **not** treat fixture output as analysis. In production, fixture mode is disabled unless `AI_ALLOW_MOCK=true` is set deliberately.
+4. Check server logs for `AI provider configured provider=... model=...` (never the key or document text).
 
 ### Cost notes (Render)
 
@@ -172,7 +223,7 @@ pnpm build
 
 ---
 
-## Database migrations (Stage 3)
+## Database migrations
 
 Alembic migrations run as part of the Render build command, before the service starts:
 
@@ -184,10 +235,11 @@ pip install -r requirements.txt && alembic upgrade head
 - Alembic reads `DATABASE_SYNC_URL` (sync psycopg-3 URL) — on Render, take the internal database URL and replace the driver: `postgresql+psycopg://...`.
 - `DATABASE_URL` (used by the app at runtime) must be the async variant: `postgresql+asyncpg://...`.
 - Migration `001` creates `users`, `cases`, and `case_memberships`.
-- Migration `002` (Stage 4) creates `documents` and `document_chunks`; enables `pgvector` extension (`CREATE EXTENSION IF NOT EXISTS vector`).
+- Migration `002` (Stage 4) creates `documents` and `document_chunks`; enables the `pgvector` extension.
+- Migration `003` (Stage 5) creates `workflow_runs` and its indexes.
 - Run `alembic upgrade head` to apply all pending migrations atomically.
 - Run `alembic downgrade base` only when you accept full data loss.
-- ⚠️ PostgreSQL behaviour of migration `001` has been logic-verified against SQLite (see `docs/decisions.md` D-015); run `alembic upgrade head` against the production database once at first deploy and confirm the three tables exist.
+- ⚠️ PostgreSQL behaviour was logic-verified against SQLite in this environment (D-015/D-032). Run `alembic upgrade head` against the production database once at first deploy and confirm all six tables exist, including `workflow_runs`.
 
 ---
 
@@ -200,11 +252,11 @@ pip install -r requirements.txt && alembic upgrade head
 - Set `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` in environment.
 - The core product functions without Neo4j; citation graph features are gated.
 
-### Redis (background jobs)
+### Redis (background jobs — not used in Stage 5)
 
 - Render Redis: available from ~\$10/month.
 - Local: `docker run -p 6379:6379 redis:latest`
-- Required from Stage 5 when document processing background jobs are added.
+- Stage 5 runs analysis as a bounded in-process FastAPI background task (D-029). Redis/Celery becomes necessary when analysis volume, OCR, or crash-safe long jobs require a durable queue.
 
 ### LangSmith (LLM tracing)
 
@@ -219,7 +271,10 @@ pip install -r requirements.txt && alembic upgrade head
 - [ ] `APP_SECRET_KEY` is a random 32+ char hex string
 - [ ] `APP_ENV=production` (disables `/docs`, `/redoc`, `/openapi.json`)
 - [ ] `CORS_ORIGINS` is set to the exact Vercel domain only
-- [ ] `GEMINI_API_KEY` is set only as a Render environment variable (never committed)
+- [ ] `AI_API_KEY` (or legacy `GEMINI_API_KEY`) is set only as a Render environment variable (never committed)
+- [ ] `GET /api/v1/ai/status` reports `is_mock: false` and the intended provider/model
+- [ ] A real analysis run cites real document IDs/pages and is not labelled as a fixture
+- [ ] `AI_ALLOW_MOCK` is not enabled in production
 - [ ] `DATABASE_URL` uses a dedicated database user with least privilege
 - [ ] All file uploads validated (type, size, sanitised filename)
 - [x] Authentication enabled (Stage 3 — JWT bearer, bcrypt password hashing)

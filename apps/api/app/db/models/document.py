@@ -133,7 +133,6 @@ class DocumentChunk(Base):
 
     __table_args__ = (
         sa.UniqueConstraint("document_id", "page_number", name="uq_document_chunk_page"),
-        sa.Index("ix_document_chunks_document_id", "document_id"),
     )
 
     def __repr__(self) -> str:

@@ -66,7 +66,10 @@ async def _read_upload_bounded(upload: UploadFile) -> bytes:
     """
     limit = _MAX_UPLOAD_BYTES
     buf = bytearray()
-    async for chunk in upload:
+    while True:
+        chunk = await upload.read(1024 * 1024)
+        if not chunk:
+            break
         buf.extend(chunk)
         if len(buf) > limit:
             raise HTTPException(

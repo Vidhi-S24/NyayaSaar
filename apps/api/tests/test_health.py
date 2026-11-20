@@ -39,6 +39,32 @@ async def test_health_readiness(client: AsyncClient):
     assert isinstance(data["services"], dict)
     # Without env vars (but with SQLite in-memory), database may be "ok" or "unavailable"
     assert data["services"]["database"]["status"] in ("ok", "unavailable", "degraded")
+    # AI status is provider-agnostic and never exposes credentials
+    assert data["services"]["ai"]["status"] in ("ok", "unavailable")
+    assert "api_key" not in str(data).lower()
+    assert "secret" not in str(data).lower()
+
+
+@pytest.mark.asyncio
+async def test_root_health_alias(client: AsyncClient):
+    response = await client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_cors_allows_local_dev_port(client: AsyncClient):
+    """Next.js often falls back to 3001+; preflight must not 400."""
+    response = await client.options(
+        "/api/v1/auth/login",
+        headers={
+            "Origin": "http://127.0.0.1:3001",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3001"
 
 
 @pytest.mark.asyncio

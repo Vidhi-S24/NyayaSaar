@@ -164,34 +164,146 @@ export interface DocumentTextPreview {
 export type DocumentStatus = DocumentProcessingStatus;
 
 // ---------------------------------------------------------------------------
-// Workflow / agent execution
+// Workflow / agent execution — Stage 5 (case-analysis workflows)
 // ---------------------------------------------------------------------------
 
-export type WorkflowStatus =
-  | "queued"
-  | "running"
-  | "paused"
-  | "completed"
-  | "failed"
-  | "cancelled";
+export type WorkflowStatus = "queued" | "running" | "completed" | "failed";
+
+export type WorkflowStepStatus = "queued" | "running" | "completed" | "failed";
+
+export interface WorkflowStep {
+  step: string;
+  status: WorkflowStepStatus | string;
+  message?: string | null;
+  at?: string | null;
+}
+
+export interface WorkflowError {
+  code: string;
+  message: string;
+}
+
+export type AnalysisSupport =
+  | "supported"
+  | "partially_supported"
+  | "unsupported";
+
+export type AnalysisConfidence = "high" | "medium" | "low";
+
+export type AnalysisClaimType = "fact" | "legal_issue" | "inference";
+
+/** A verified reference to an exact document page supplied to the analyst. */
+export interface AnalysisSourceRef {
+  source_id: string;
+  document_id: string;
+  document_name: string;
+  page_number: number;
+  quote: string | null;
+  quote_verified: boolean;
+}
+
+export interface AnalysisClaim {
+  claim: string;
+  claim_type: AnalysisClaimType;
+  sources: AnalysisSourceRef[];
+  support: AnalysisSupport;
+  confidence: AnalysisConfidence;
+}
+
+export interface AnalysisTimelineEvent {
+  date_text: string;
+  event: string;
+  sources: AnalysisSourceRef[];
+  support: AnalysisSupport;
+}
+
+export interface AnalysisVerificationSummary {
+  total_claims: number;
+  supported: number;
+  partially_supported: number;
+  unsupported: number;
+  invalid_source_refs: number;
+  retried: boolean;
+  notes: string[];
+}
+
+export interface AnalysisSourceManifestEntry {
+  source_id: string;
+  document_id: string;
+  document_name: string;
+  page_number: number;
+  truncated: boolean;
+}
+
+/** Structured, source-linked analysis. AI-assisted, never legal advice. */
+export interface CaseAnalysisResult {
+  workflow_id: string;
+  case_id: string;
+  generated_at: string;
+  provider: string;
+  model: string;
+  is_mock: boolean;
+  insufficient_sources: boolean;
+  summary: string;
+  parties: string[];
+  facts: AnalysisClaim[];
+  legal_issues: AnalysisClaim[];
+  timeline: AnalysisTimelineEvent[];
+  inferences: AnalysisClaim[];
+  unverified_hypotheses: string[];
+  missing_information: string[];
+  limitations: string[];
+  verification: AnalysisVerificationSummary;
+  source_manifest: AnalysisSourceManifestEntry[];
+}
 
 export interface WorkflowRun {
   id: string;
   case_id: string;
   workflow_type: string;
   status: WorkflowStatus;
-  started_at?: string;
-  completed_at?: string;
-  progress?: number;        // 0–100
-  current_step?: string;
-  error?: string;
+  progress: number;
+  current_step: string | null;
+  provider: string | null;
+  model: string | null;
+  is_mock: boolean;
+  document_ids: string[];
+  focus: string | null;
+  result: CaseAnalysisResult | null;
+  steps: WorkflowStep[];
+  token_usage: Record<string, number>;
+  error: WorkflowError | null;
+  attempt_count: number;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface WorkflowRunListResponse {
+  items: WorkflowRun[];
+  total: number;
+}
+
+export interface CaseAnalysisRequest {
+  document_ids?: string[] | null;
+  focus?: string | null;
+}
+
+export interface AIStatus {
+  provider: string;
+  requested_provider: string;
+  model: string;
+  is_mock: boolean;
+  configured: boolean;
+  message: string;
 }
 
 // ---------------------------------------------------------------------------
-// Analysis results
+// Analysis placeholders reserved for Stage 6 (not produced in Stage 5)
 // ---------------------------------------------------------------------------
 
-/** A sourced claim: any assertion that must be traceable to a source. */
+/** @deprecated Stage 5 uses AnalysisClaim. Reserved for Stage 6 research. */
 export interface SourcedClaim {
   content: string;
   source_id: string;
@@ -201,7 +313,7 @@ export interface SourcedClaim {
   is_model_inference: boolean;
 }
 
-/** A legal authority reference returned by the research agent. */
+/** Reserved for Stage 6 precedent research. No authorities are returned yet. */
 export interface LegalAuthority {
   id: string;
   title: string;

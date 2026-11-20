@@ -26,11 +26,11 @@ NyayaSaar provides five core intelligence modules:
 |---|---|
 | Frontend | Next.js 15 (App Router), React, TypeScript, Tailwind CSS, shadcn/ui |
 | Backend | Python, FastAPI, Pydantic, versioned REST API (`/api/v1`) |
-| Agentic AI | Google Gemini API, LangGraph, LangChain |
+| Agentic AI | Provider-agnostic layer: Google Gemini (official SDK, default), OpenAI, OpenAI-compatible (Groq/OpenRouter/Ollama/etc.), Anthropic; LangGraph |
 | Database | PostgreSQL + pgvector, SQLAlchemy, Alembic |
 | Graph (optional) | Neo4j for citation graph |
-| Background Jobs | Redis + Celery (optional, when needed) |
-| Documents | PyMuPDF, Docling, OCR support |
+| Background Jobs | In-process bounded workflow runner (Stage 5); Redis + Celery when needed |
+| Documents | PyMuPDF, python-docx, OCR extension point |
 | Storage | Local dev + provider abstraction |
 
 ---
@@ -66,8 +66,8 @@ nyayasaar/
 
 - Node.js ≥ 20
 - pnpm ≥ 9
-- Python ≥ 3.11
-- PostgreSQL (optional for Stage 1)
+- Python 3.13 (required for the pinned LangGraph stack)
+- PostgreSQL (optional for local development; SQLite fallback is available)
 
 ### 1. Install dependencies
 
@@ -84,7 +84,11 @@ pnpm install
 ```bash
 # Copy the example env file and fill in values
 cp .env.example .env
-# Edit .env with your configuration
+# Edit .env with your configuration.
+#
+# For real AI analysis set AI_PROVIDER, AI_MODEL, and AI_API_KEY.
+# With no key outside production, the API uses a clearly-labelled fixture;
+# it never claims a model was called. See docs/stage-handoffs/stage-5.md.
 ```
 
 ### 3. Start the frontend
@@ -130,7 +134,7 @@ From `apps/api/` (with the venv active):
 
 | Command | Description |
 |---|---|
-| `python -m pytest tests/` | Run all backend tests (75 passing as of Stage 4) |
+| `python -m pytest tests/` | Run all backend tests (127 passing as of Stage 5) |
 | `alembic upgrade head` | Apply database migrations (needs `DATABASE_SYNC_URL`) |
 | `python -m scripts.seed_demo` | Seed a demo user + labelled [DEMO] sample cases (idempotent) |
 | `uvicorn app.main:app --reload --port 8000` | Start the API |
@@ -155,7 +159,7 @@ From `apps/api/` (with the venv active):
 | 2 | Premium frontend and application experience | ✅ Complete |
 | 3 | Database, authentication, and user management | ✅ Complete |
 | 4 | Document ingestion pipeline | ✅ Complete |
-| 5 | Gemini/LangGraph agentic workflows | ⏳ Pending |
+| 5 | Provider-agnostic AI + LangGraph case analysis | ✅ Complete |
 | 6 | Retrieval and legal analysis modules | ⏳ Pending |
 | 7 | Evaluation, monitoring, and deployment | ⏳ Pending |
 

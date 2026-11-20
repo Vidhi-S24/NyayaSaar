@@ -29,6 +29,7 @@ import {
 import { CaseFormDialog } from "@/components/cases/case-form-dialog";
 import { DocumentUpload } from "@/components/documents/document-upload";
 import { DocumentList } from "@/components/documents/document-list";
+import { AnalysisPanel } from "@/components/analysis/analysis-panel";
 import { deleteCase, formatRelativeTime, getCase, updateCase } from "@/lib/api/cases";
 import { ApiClientError } from "@/lib/api-client";
 import type { CaseCreateInput } from "@nyayasaar/shared";
@@ -38,6 +39,7 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
   const queryClient = useQueryClient();
   const [caseId, setCaseId] = useState<string | null>(null);
   const [uploadedAt, setUploadedAt] = useState<number>(0);
+  const [activeTab, setActiveTab] = useState("documents");
 
   useEffect(() => {
     params.then((p) => setCaseId(p.id));
@@ -228,10 +230,11 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
       <Separator />
 
       {/* Tabs */}
-      <Tabs defaultValue="documents">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="issues">Legal Issues ({c.issues.length})</TabsTrigger>
           <TabsTrigger value="documents">Documents ({c.documents_count})</TabsTrigger>
+          <TabsTrigger value="analysis">Analysis</TabsTrigger>
         </TabsList>
 
         <TabsContent value="issues">
@@ -239,7 +242,7 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
             <div className="mt-4 rounded-lg border border-border bg-card">
               <EmptyState
                 title="No legal issues recorded"
-                description="Add issues manually via Edit, or they will be extracted from documents once AI analysis is connected (Stage 5)."
+                description="Add issues manually via Edit, or run the Analysis tab to extract source-linked legal issues from the documents."
               />
             </div>
           ) : (
@@ -267,6 +270,13 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
               }}
             />
             <DocumentList caseId={c.id} uploadedAt={uploadedAt} />
+          </div>
+        </TabsContent>
+
+        {/* Analysis tab — Stage 5 live workflow */}
+        <TabsContent value="analysis">
+          <div className="mt-4">
+            <AnalysisPanel caseId={c.id} documentCount={c.documents_count} />
           </div>
         </TabsContent>
       </Tabs>
