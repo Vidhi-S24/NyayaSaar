@@ -1,20 +1,32 @@
 "use client";
 
-import { User, Key, Bell, Shield } from "lucide-react";
+import { User, Key, Bell, Shield, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/shared/page-header";
 import { DemoNotice } from "@/components/shared/demo-notice";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/lib/auth/auth-context";
+import { getAIStatus } from "@/lib/api/analysis";
+import { ApiClientError } from "@/lib/api-client";
 
 export default function SettingsPage() {
   const { user, signOut } = useAuth();
 
+  const aiQuery = useQuery({
+    queryKey: ["ai-status"],
+    queryFn: getAIStatus,
+    select: (envelope) => envelope.data,
+    staleTime: 60_000,
+  });
+  const ai = aiQuery.data;
+
   return (
     <div className="flex flex-col gap-6 p-6 pb-10">
-      <DemoNotice message="Profile editing is not yet persisted. Session, authentication, and case data are live as of Stage 3." />
+      <DemoNotice message="Profile editing is not yet persisted. Authentication, cases, documents, and Stage 5 case analysis are live." />
 
       <PageHeader
         title="Settings"
@@ -27,7 +39,7 @@ export default function SettingsPage() {
           <ul className="flex flex-col gap-1">
             {[
               { icon: User, label: "Profile" },
-              { icon: Key, label: "API & Integrations", note: "Stage 5" },
+              { icon: Key, label: "API & Integrations", note: "Live" },
               { icon: Bell, label: "Notifications", note: "Stage 4" },
               { icon: Shield, label: "Security & Privacy", note: "Stage 4" },
             ].map(({ icon: Icon, label, note }) => (
@@ -75,6 +87,66 @@ export default function SettingsPage() {
                   Sign out
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          <Separator />
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">AI provider</CardTitle>
+              <CardDescription className="text-xs">
+                Read from the server&apos;s <code>apps/api/.env</code>. Keys never reach
+                the browser, and changes require an API restart.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {aiQuery.isLoading && (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  Checking provider status…
+                </p>
+              )}
+              {aiQuery.isError && (
+                <div
+                  className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800"
+                  role="alert"
+                >
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>
+                    {aiQuery.error instanceof ApiClientError
+                      ? aiQuery.error.message
+                      : "Could not read AI provider status."}
+                  </span>
+                </div>
+              )}
+              {ai && (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">
+                      {ai.provider} / {ai.model}
+                    </Badge>
+                    {ai.configured ? (
+                      <Badge variant="success" className="gap-1">
+                        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                        Configured
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive">Not configured</Badge>
+                    )}
+                    {ai.is_mock && <Badge variant="warning">Fixture mode</Badge>}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{ai.message}</p>
+                  {ai.is_mock && (
+                    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      Fixture mode means no AI model is called. To use a real provider,
+                      set <code>AI_PROVIDER</code>, <code>AI_MODEL</code>, and{" "}
+                      <code>AI_API_KEY</code> in <code>apps/api/.env</code>, then restart
+                      the API.
+                    </p>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
 

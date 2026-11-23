@@ -76,7 +76,8 @@ Behaviour:
 
 - `apps/web/src/components/analysis/analysis-panel.tsx` — real start, polling (2 s while active), progress/steps, provider/fixture badge, failure + retry, structured results, verification score, source viewer.
 - `apps/web/src/lib/api/analysis.ts` — typed wrappers + honest view helpers.
-- Case workspace has a new **Analysis** tab. No fake buttons, fake progress, or placeholder results.
+- `/intelligence` is a live case selector that renders the same `AnalysisPanel`; the case workspace has an **Analysis** tab. No fake buttons, fake progress, or placeholder results.
+- `/settings` shows the live provider/model/configured/fixture status from `/api/v1/ai/status`.
 - Fixture output is explicitly labelled: "Development fixture — no AI model was called".
 - Every fact/issue/timeline entry shows support status and opens the exact document page.
 
@@ -299,7 +300,7 @@ pip install -r requirements-dev.txt
 
 # Optional: real provider
 $env:AI_PROVIDER="gemini"
-$env:AI_MODEL="gemini-2.5-flash"
+$env:AI_MODEL="gemini-3.1-flash-lite"
 $env:AI_API_KEY="<key>"
 
 # No key outside production → clearly-labelled fixture mode.
@@ -405,7 +406,7 @@ Completed result shape (abridged):
     "status": "completed",
     "progress": 100,
     "provider": "gemini",
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.1-flash-lite",
     "is_mock": false,
     "result": {
       "summary": "…",
@@ -460,7 +461,7 @@ Only failed runs; 422 when the attempt limit is reached or the run is not failed
 
 ## 7. Limitations and risks
 
-1. **No live provider verification** — the adapters are mock-tested. Run the deployment smoke test in `docs/deployment.md` with a real key before claiming production readiness.
+1. **Live provider verification** — completed on 2026-11-23 against `gemini-3.1-flash-lite`: `/api/v1/ai/status` reported `is_mock: false`, and a real uploaded TXT document completed the full graph with 8/8 claims supported. Re-run the deployment smoke test in `docs/deployment.md` after changing provider/model. The Gemini adapter sends a constraint-free JSON schema because Gemini rejects Pydantic constraint-heavy schemas with `400 INVALID_ARGUMENT`; local Pydantic validation remains authoritative (D-035).
 2. **In-process runner** — no durable queue. A crash/restart marks the run failed; it is retryable, but the in-flight task is lost. LangGraph `MemorySaver` is in-process only.
 3. **Source budget truncation** — very large cases exceed `AGENT_MAX_INPUT_CHARS`; omissions/truncation are reported in notes, not hidden.
 4. **Prompt injection is mitigated, not solved** — wrappers + escaping + deterministic verification + authority-citation flags reduce risk; human review is still mandatory.

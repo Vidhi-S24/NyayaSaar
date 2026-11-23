@@ -5,6 +5,16 @@ No real PostgreSQL required.
 
 from __future__ import annotations
 
+import os
+
+# Tests must be hermetic: never pick up a developer's apps/api/.env (which may
+# contain a real provider key). Force the labelled fixture before app imports.
+os.environ["AI_PROVIDER"] = "mock"
+os.environ["AI_MODEL"] = "fixture"
+os.environ["AI_API_KEY"] = ""
+os.environ["GEMINI_API_KEY"] = ""
+os.environ["AI_BASE_URL"] = ""
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient

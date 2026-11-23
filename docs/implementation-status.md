@@ -32,7 +32,7 @@
 | `apps/api/app/routers/analysis.py` | Start/status/result/list/retry endpoints (all ownership-gated) |
 | `apps/api/app/routers/ai.py` | `GET /api/v1/ai/status` (no secrets) |
 | `apps/api/app/schemas/analysis.py` | API schemas for runs and status |
-| `apps/api/tests/test_ai_providers.py` | 21 provider/registry tests (mocked SDK/HTTP, retries, timeouts, auth, production fixture policy) |
+| `apps/api/tests/test_ai_providers.py` | 23 provider/registry tests (mocked SDK/HTTP, retries, timeouts, auth, production fixture policy, Gemini schema simplification) |
 | `apps/api/tests/test_verifier.py` | 11 verifier/source-preservation/prompt-safety tests |
 | `apps/api/tests/test_analysis_graph.py` | 6 graph tests (success, insufficient sources, errors, retries, budgets) |
 | `apps/api/tests/test_analysis_api.py` | 14 API tests (auth, polling, retries, conflicts, provider failure recovery, source IDs/pages) |
@@ -55,14 +55,14 @@
 | Authenticated start/status/result APIs | ✅ 202 start + polling; ownership enforced; 404 cross-user |
 | Recoverable failures | ✅ Failed runs retryable; interrupted runs marked failed on startup |
 | No fake UI data/buttons | ✅ Real endpoints, real progress/steps, explicit fixture and empty states |
-| Tests mock all AI calls | ✅ 52 new backend tests; no network calls |
+| Tests mock all AI calls | ✅ 59 new backend tests; no network calls |
 | Docs/handoff updated | ✅ This file, decisions, architecture, deployment, stage-5 handoff, env example, READMEs |
 
 #### Verification results (actual)
 
 ```
 apps/api:  .venv\Scripts\python.exe -m pytest tests -q
-           → 127 passed (75 pre-existing + 52 new), 5 warnings
+           → 134 passed (75 pre-existing + 59 new), 5 warnings
            alembic upgrade head (temp SQLite)
            → 001 → 002 → 003; tables include workflow_runs; version=003
 apps/web:  pnpm --filter @nyayasaar/web type-check → exit 0

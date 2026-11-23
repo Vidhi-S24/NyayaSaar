@@ -305,6 +305,46 @@ async def test_gemini_success_with_fake_client():
     assert result.input_tokens == 9
 
 
+def test_gemini_schema_strips_unsupported_constraints():
+    from app.agents.schemas import CaseAnalysisDraft
+    from app.ai.providers.gemini import _gemini_response_schema
+
+    schema = _gemini_response_schema(CaseAnalysisDraft)
+    text = json.dumps(schema)
+    assert "$defs" not in text
+    assert "$ref" not in text
+    assert "properties" in schema
+    for key in ("maxItems", "minItems", "minLength", "maxLength", "additionalProperties"):
+        assert key not in text
+
+
+def test_gemini_schema_keeps_nested_shape():
+    from app.agents.schemas import CaseAnalysisDraft
+    from app.ai.providers.gemini import _gemini_response_schema
+
+    schema = _gemini_response_schema(CaseAnalysisDraft)
+    facts = schema["properties"]["facts"]
+    assert facts["type"] == "array"
+    assert facts["items"]["properties"]["claim"]["type"] == "string"
+
+
+def test_env_file_is_absolute_api_env():
+    from app.config import ENV_FILE, Settings
+
+    assert ENV_FILE.is_absolute()
+    assert ENV_FILE.name == ".env"
+    assert ENV_FILE.parent.name == "api"
+    assert Settings.model_config["env_file"] == str(ENV_FILE)
+
+
+def test_gemini_maps_model_not_found():
+    err = GeminiProvider._map_error(
+        Exception("404 NOT_FOUND: model no longer available")
+    )
+    assert err.code == "provider_model_unavailable"
+    assert err.retryable is False
+
+
 @pytest.mark.asyncio
 async def test_gemini_empty_response_is_reported():
     class FakeResponse:

@@ -8,17 +8,23 @@ All secrets live in environment variables; never hardcode or log them.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Resolve apps/api/.env regardless of the process working directory. A relative
+# ".env" only works when uvicorn is started from apps/api, which is a common
+# source of "I added a key but the backend still uses the fixture" confusion.
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables / .env file."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -138,7 +144,7 @@ class Settings(BaseSettings):
         description="Google Gemini API key. Used if AI_API_KEY is empty.",
     )
     gemini_model_id: str = Field(
-        default="gemini-2.5-flash",
+        default="gemini-3.1-flash-lite",
         description="Gemini model identifier; used if AI_MODEL is empty.",
     )
 
@@ -222,7 +228,7 @@ class Settings(BaseSettings):
         if self.ai_provider == "gemini" and self.gemini_model_id:
             return self.gemini_model_id
         defaults = {
-            "gemini": "gemini-2.5-flash",
+            "gemini": "gemini-3.1-flash-lite",
             "openai": "gpt-4.1-mini",
             "anthropic": "claude-sonnet-4-5",
             "openai_compatible": "",

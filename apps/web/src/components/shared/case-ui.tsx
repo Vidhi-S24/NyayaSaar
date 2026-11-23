@@ -96,9 +96,8 @@ export function ComingSoonState({ feature }: { feature: string }) {
       <div>
         <p className="text-sm font-medium text-foreground">{feature}</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          This module will be connected in a future stage (Stage 5 — AI/LangGraph).
-          <br />
-          Navigation and interface are functional; AI analysis is not yet wired.
+          This module is planned for a later stage. Stage 5 case analysis is
+          available now under Case Intelligence.
         </p>
       </div>
     </div>

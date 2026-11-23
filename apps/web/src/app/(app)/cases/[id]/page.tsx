@@ -141,11 +141,11 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
   }
 
   const modules = [
-    { href: "/intelligence", label: "Case Intelligence", icon: Brain, desc: "Extract facts & issues" },
-    { href: "/contradictions", label: "Contradiction & Gap", icon: AlertTriangle, desc: "Detect conflicts" },
-    { href: "/precedents", label: "Precedent Explorer", icon: BookOpen, desc: "Find authorities" },
-    { href: "/advocate", label: "Advocate Mode", icon: Scale, desc: "Build arguments" },
-    { href: "/judge", label: "Judge / Clerk", icon: Gavel, desc: "Audit analysis" },
+    { href: `/intelligence?caseId=${c.id}`, label: "Case Intelligence", icon: Brain, desc: "Run source-linked analysis" },
+    { href: "/contradictions", label: "Contradiction & Gap", icon: AlertTriangle, desc: "Stage 6 module" },
+    { href: "/precedents", label: "Precedent Explorer", icon: BookOpen, desc: "Stage 6 module" },
+    { href: "/advocate", label: "Advocate Mode", icon: Scale, desc: "Stage 6 module" },
+    { href: "/judge", label: "Judge / Clerk", icon: Gavel, desc: "Stage 6 module" },
   ];
 
   return (
@@ -210,7 +210,7 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
       {/* Intelligence modules */}
       <div>
         <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Run Analysis — Stage 5
+          Intelligence modules
         </p>
         <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
           {modules.map((mod) => {

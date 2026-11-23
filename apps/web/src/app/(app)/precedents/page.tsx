@@ -9,7 +9,7 @@ export const metadata = { title: "Precedent Explorer" };
 export default function PrecedentsPage() {
   return (
     <div className="flex flex-col gap-6 p-6 pb-10">
-      <DemoNotice message="Precedent Explorer requires a configured legal corpus and the LangGraph backend (Stage 5–6). When no corpus is configured, the system will clearly say so. These are not real legal research results." />
+      <DemoNotice message="Precedent Explorer requires a configured legal-authority corpus and is planned for Stage 6. Stage 5 case analysis is available now under Case Intelligence and uses only uploaded documents — it does not cite external authorities." />
 
       <PageHeader
         title="Precedent Explorer"

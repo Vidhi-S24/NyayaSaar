@@ -9,7 +9,7 @@ export const metadata = { title: "Advocate Mode" };
 export default function AdvocatePage() {
   return (
     <div className="flex flex-col gap-6 p-6 pb-10">
-      <DemoNotice message="Advocate Mode requires the Gemini/LangGraph backend (Stage 5). This module develops arguments from uploaded case materials only — it does not provide legal advice." />
+      <DemoNotice message="Advocate Mode is planned for Stage 6. Stage 5 case analysis is available now under Case Intelligence. This module will develop arguments from uploaded case materials only — it does not provide legal advice." />
 
       <PageHeader
         title="Advocate Mode"

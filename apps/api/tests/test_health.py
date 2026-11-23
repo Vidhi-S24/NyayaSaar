@@ -68,6 +68,13 @@ async def test_cors_allows_local_dev_port(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_openai_style_path_is_rejected(client: AsyncClient):
+    """NyayaSaar is not an OpenAI-compatible server; /v1/* must stay 404."""
+    response = await client.get("/v1/models")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_health_response_envelope(client: AsyncClient):
     """Ensure all fields of the response envelope are present."""
     response = await client.get("/api/v1/health")

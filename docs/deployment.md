@@ -40,9 +40,11 @@ git clone <repo-url>
 cd nyayasaar
 
 # 2. Copy env file
-cp .env.example .env
-# Edit .env — set at minimum NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-# and, for PostgreSQL, DATABASE_URL / DATABASE_SYNC_URL.
+# The API loads apps/api/.env; the frontend uses apps/web/.env.local.
+cp .env.example apps/api/.env
+# Edit apps/api/.env — for PostgreSQL set DATABASE_URL / DATABASE_SYNC_URL.
+# Create apps/web/.env.local with:
+#   NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 # 3. Install JS dependencies
 pnpm install
@@ -162,7 +164,7 @@ Provider/model changes require no code changes:
 ```bash
 # Gemini (default, official google-genai SDK)
 AI_PROVIDER=gemini
-AI_MODEL=gemini-2.5-flash
+AI_MODEL=gemini-3.1-flash-lite
 AI_API_KEY=...
 
 # OpenAI
@@ -187,7 +189,8 @@ After deploy:
 1. `GET /api/v1/ai/status` (authenticated) must report `is_mock: false`, the expected provider/model, and `configured: true`.
 2. Upload a small TXT/PDF with known text, open the case **Analysis** tab, run it, and confirm every fact cites the real document/page and the result says `is_mock: false`.
 3. If `is_mock: true` appears, the key is missing or invalid for the selected provider. Do **not** treat fixture output as analysis. In production, fixture mode is disabled unless `AI_ALLOW_MOCK=true` is set deliberately.
-4. Check server logs for `AI provider configured provider=... model=...` (never the key or document text).
+4. If a run fails with `provider_model_unavailable`, the model ID has been retired for your account; set `AI_MODEL` to a model your key can use.
+5. Check server logs for `AI provider configured provider=... model=...` (never the key or document text).
 
 ### Cost notes (Render)
 

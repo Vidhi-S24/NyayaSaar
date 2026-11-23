@@ -82,9 +82,12 @@ pnpm install
 ### 2. Environment setup
 
 ```bash
-# Copy the example env file and fill in values
-cp .env.example .env
-# Edit .env with your configuration.
+# Backend: the API loads apps/api/.env (regardless of the directory you run from)
+cp .env.example apps/api/.env
+# Edit apps/api/.env with your configuration.
+#
+# Frontend: create apps/web/.env.local with:
+#   NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 #
 # For real AI analysis set AI_PROVIDER, AI_MODEL, and AI_API_KEY.
 # With no key outside production, the API uses a clearly-labelled fixture;

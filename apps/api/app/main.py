@@ -79,6 +79,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             ai_config.provider,
             ai_config.model,
         )
+        if ai_config.provider == "gemini" and not settings.ai_gemini_native_schema:
+            logger.warning(
+                "AI_GEMINI_NATIVE_SCHEMA is disabled. Gemini may return "
+                "non-JSON text and fail structured validation; set it to true "
+                "unless the selected model does not support response schemas."
+            )
 
     # Initialise the DB engine / connection pool if DATABASE_URL is set
     if settings.database_configured:
@@ -209,6 +215,26 @@ def create_app() -> FastAPI:
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
+        return response
+
+    @app.middleware("http")
+    async def openai_probe_diagnostics(request: Request, call_next):
+        """Identify clients probing OpenAI-style /v1/* paths.
+
+        NyayaSaar exposes /api/v1/*, not the OpenAI API. A 404 here is correct,
+        but logging the caller's User-Agent makes a misconfigured local tool
+        (Open WebUI, Continue, Cursor, LiteLLM, an OpenAI SDK script, etc.)
+        easy to find.
+        """
+        response = await call_next(request)
+        if response.status_code == 404 and request.url.path.startswith("/v1/"):
+            logger.warning(
+                "Rejected OpenAI-style probe %s %s ua=%r origin=%r",
+                request.method,
+                request.url.path,
+                request.headers.get("user-agent"),
+                request.headers.get("origin"),
+            )
         return response
 
     # -------------------------------------------------------------------

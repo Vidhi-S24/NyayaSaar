@@ -26,7 +26,7 @@ export default function HistoryPage() {
         actions={
           <Button variant="outline" size="sm" disabled>
             <FileDown className="h-3.5 w-3.5" />
-            Export — Stage 5
+            Export — later stage
           </Button>
         }
       />

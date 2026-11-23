@@ -7,7 +7,10 @@ dependency is missing (for example, in a constrained development image).
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from typing import Any
+
+from pydantic import BaseModel
 
 from app.ai.base import (
     LLMProvider,
@@ -20,6 +23,67 @@ from app.ai.base import (
 )
 
 logger = logging.getLogger("nyayasaar.ai.gemini")
+
+# Gemini rejects response schemas that carry too many validation states.
+# Pydantic emits ``minLength``/``maxLength``/``maxItems``/``minimum``/... which
+# are enforced locally after parsing but make the vendor-side schema too
+# complex (a live 400 INVALID_ARGUMENT). We send a constraint-free JSON schema
+# to the model and keep the real Pydantic model for validation. This is an
+# adapter concern: agent code still declares one schema.
+_UNSUPPORTED_SCHEMA_KEYS = frozenset(
+    {
+        "$defs",
+        "$schema",
+        "minLength",
+        "maxLength",
+        "minItems",
+        "maxItems",
+        "uniqueItems",
+        "minProperties",
+        "maxProperties",
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "pattern",
+        "format",
+        "default",
+        "examples",
+        "additionalProperties",
+    }
+)
+
+
+def _inline_schema_node(node: Any, defs: dict[str, Any]) -> Any:
+    """Inline ``$ref`` targets and drop vendor-unsupported constraint keys."""
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/$defs/"):
+            target = defs.get(ref.rsplit("/", 1)[-1], {})
+            merged = {k: v for k, v in node.items() if k != "$ref"}
+            merged.update(target)
+            return _inline_schema_node(merged, defs)
+        return {
+            key: _inline_schema_node(value, defs)
+            for key, value in node.items()
+            if key not in _UNSUPPORTED_SCHEMA_KEYS
+        }
+    if isinstance(node, list):
+        return [_inline_schema_node(item, defs) for item in node]
+    return node
+
+
+@lru_cache(maxsize=32)
+def _gemini_response_schema(model: type[BaseModel]) -> dict[str, Any]:
+    """Return a Gemini-safe JSON schema for a Pydantic output model."""
+    raw = model.model_json_schema()
+    defs = raw.get("$defs", {})
+    simplified = _inline_schema_node(raw, defs)
+    if not isinstance(simplified, dict):  # pragma: no cover - defensive
+        return raw
+    return simplified
+
 
 
 class GeminiProvider(LLMProvider):
@@ -74,7 +138,9 @@ class GeminiProvider(LLMProvider):
             "response_mime_type": "application/json",
         }
         if self.native_schema and self._types is not None:
-            config_kwargs["response_schema"] = request.output_schema
+            config_kwargs["response_schema"] = _gemini_response_schema(
+                request.output_schema
+            )
 
         try:
             if self._types is not None:
@@ -140,6 +206,18 @@ class GeminiProvider(LLMProvider):
                 "The Gemini service is temporarily unavailable.",
                 code="provider_unavailable",
                 retryable=True,
+            )
+        if (
+            "404" in raw
+            or "not_found" in raw
+            or "not found" in raw
+            or "no longer available" in raw
+        ):
+            return ProviderError(
+                "The configured Gemini model is not available for this API key. "
+                "Update AI_MODEL to a model your account can use.",
+                code="provider_model_unavailable",
+                retryable=False,
             )
         if "400" in status_text or "invalid" in raw:
             return ProviderError(

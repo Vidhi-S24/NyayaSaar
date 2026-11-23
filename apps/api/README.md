@@ -50,7 +50,11 @@ python -m pytest
 ## Environment variables
 
 See `../../.env.example` for all available variables.
-Copy it to `../../.env` and fill in values.
+Copy it to `apps/api/.env` (the API resolves this path relative to the package,
+so it works even if you start uvicorn from the repository root).
+
+`.env` changes require an API restart: `uvicorn --reload` watches Python files,
+not `.env`.
 
 ## Render deployment
 

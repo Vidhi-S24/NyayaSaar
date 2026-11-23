@@ -9,7 +9,7 @@ export const metadata = { title: "Judge / Clerk Mode" };
 export default function JudgePage() {
   return (
     <div className="flex flex-col gap-6 p-6 pb-10">
-      <DemoNotice message="Judge/Clerk Mode requires the Gemini/LangGraph backend (Stage 5). This is an analytical audit tool — it does not simulate or replace judicial decision-making." />
+      <DemoNotice message="Judge/Clerk Mode is planned for Stage 6. Stage 5 case analysis is available now under Case Intelligence. This is an analytical audit tool — it does not simulate or replace judicial decision-making." />
 
       <PageHeader
         title="Judge / Clerk Mode"

@@ -3,8 +3,8 @@
 /**
  * Dashboard — live statistics from the authenticated user's real cases.
  *
- * Statistics that depend on document processing (Stage 4) or AI analysis
- * (Stage 5) are shown honestly as "not yet available" — no fake numbers.
+ * Statistics that depend on document processing or cross-case AI aggregation
+ * are shown honestly as unavailable — no fake numbers.
  */
 
 import Link from "next/link";
@@ -78,19 +78,19 @@ export default function DashboardPage() {
           label="Documents"
           value={casesQuery.isLoading ? <Skeleton className="h-8 w-12" /> : stats.documents}
           icon={<FileText className="h-4 w-4" />}
-          trend="Upload available in Stage 4"
+          trend="Upload in any case workspace"
         />
         <StatCard
           label="Reports Generated"
           value="—"
           icon={<TrendingUp className="h-4 w-4" />}
-          trend="Available from Stage 5"
+          trend="Run analyses from Case Intelligence"
         />
         <StatCard
           label="Contradictions Found"
           value="—"
           icon={<AlertTriangle className="h-4 w-4" />}
-          trend="Available from Stage 5"
+          trend="Planned for Stage 6"
         />
       </div>
 
@@ -186,7 +186,7 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Activity feed — honest empty state until workflows land */}
+        {/* Activity feed — honest empty state until activity tracking lands */}
         <div>
           <Card>
             <CardHeader className="pb-3">
@@ -198,7 +198,7 @@ export default function DashboardPage() {
               <div className="px-5 pb-5">
                 <EmptyState
                   title="No activity yet"
-                  description="Activity tracking (uploads, analyses, reports) will be recorded once document processing is connected in Stage 4."
+                  description="Uploads and analyses are visible in their case workspaces. A cross-case activity feed is not yet persisted."
                 />
               </div>
             </CardContent>
@@ -213,11 +213,11 @@ export default function DashboardPage() {
         </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {[
-            { href: "/intelligence", label: "Case Intelligence", desc: "Extract facts, issues, authorities" },
-            { href: "/contradictions", label: "Contradiction & Gap", desc: "Detect conflicts, missing evidence" },
-            { href: "/precedents", label: "Precedent Explorer", desc: "Citation relationships, authorities" },
-            { href: "/advocate", label: "Advocate Mode", desc: "Opposing arguments, evidentiary gaps" },
-            { href: "/judge", label: "Judge / Clerk", desc: "Audit reasoning, issue coverage" },
+            { href: "/intelligence", label: "Case Intelligence", desc: "Run source-linked analysis", stage: "Live" },
+            { href: "/contradictions", label: "Contradiction & Gap", desc: "Detect conflicts, missing evidence", stage: "Stage 6" },
+            { href: "/precedents", label: "Precedent Explorer", desc: "Search legal authorities", stage: "Stage 6" },
+            { href: "/advocate", label: "Advocate Mode", desc: "Build opposing arguments", stage: "Stage 6" },
+            { href: "/judge", label: "Judge / Clerk", desc: "Audit reasoning and coverage", stage: "Stage 6" },
           ].map((mod) => (
             <Link
               key={mod.href}
@@ -228,8 +228,11 @@ export default function DashboardPage() {
                 {mod.label}
               </span>
               <span className="text-xs text-muted-foreground">{mod.desc}</span>
-              <Badge variant="outline" className="mt-1 w-fit text-[10px]">
-                Stage 5
+              <Badge
+                variant={mod.stage === "Live" ? "success" : "outline"}
+                className="mt-1 w-fit text-[10px]"
+              >
+                {mod.stage}
               </Badge>
             </Link>
           ))}

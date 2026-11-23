@@ -9,7 +9,7 @@ export const metadata = { title: "Contradiction & Gap Hunter" };
 export default function ContradictionsPage() {
   return (
     <div className="flex flex-col gap-6 p-6 pb-10">
-      <DemoNotice message="Contradiction & Gap Hunter requires the Gemini/LangGraph backend (Stage 5). Interface is ready; AI analysis is not yet connected." />
+      <DemoNotice message="Contradiction & Gap Hunter is planned for Stage 6. Stage 5 case analysis is available now under Case Intelligence — facts, legal issues, timeline, and source verification." />
 
       <PageHeader
         title="Contradiction & Gap Hunter"

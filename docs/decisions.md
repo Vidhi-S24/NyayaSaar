@@ -266,3 +266,23 @@
 **Decision:** Pin `langgraph==0.6.11`, `langchain-core==0.3.79`, `langsmith==0.3.45`, and `google-genai>=1.0,<2.0`; run the backend on Python 3.13.17 in this environment.
 **Rationale:** Python 3.15 had no compatible wheels for parts of the graph stack (`zstandard` tried a source build with no MSVC), and a newer langsmith/xxhash combination was blocked by the local Windows Application Control policy. The pinned set imports and runs cleanly; 127 backend tests pass.
 **Consequence:** Do not bump these pins casually. Re-run the full backend suite and a live provider smoke test before changing them.
+
+### D-033: `apps/api/.env` is resolved relative to the package; tests never read it
+
+**Date:** Stage 5 follow-up
+**Decision:** `Settings` loads `Path(__file__).parent.parent / ".env"` (that is, `apps/api/.env`) instead of a CWD-relative `.env`. The test suite forces `AI_PROVIDER=mock` before importing app modules so a developer's real key cannot change test behaviour.
+**Rationale:** A relative `.env` silently fails when uvicorn is started from the repository root, which makes a configured provider look like it is still using the fixture. Tests must be hermetic and must never make network calls or depend on local credentials.
+**Consequence:** `.env` changes require an API restart; `uvicorn --reload` watches Python files, not `.env`. Gemini's native response schema stays enabled by default because disabling it produced non-JSON output in a live smoke test.
+
+### D-034: Gemini model IDs are configuration, not code
+
+**Date:** Stage 5 follow-up
+**Decision:** The default Gemini model is `gemini-3.1-flash-lite`. `provider_model_unavailable` is a distinct non-retryable error code.
+**Rationale:** Google retires model IDs for new users (for example `gemini-2.5-flash` returned 404 in a live check). Operators must be able to change `AI_MODEL` without a code change, and the UI/API must say clearly when the configured model is unavailable rather than reporting a generic provider failure.
+
+### D-035: Gemini receives a constraint-free JSON schema
+
+**Date:** Stage 5 follow-up
+**Decision:** The Gemini adapter converts the agent's Pydantic output model to a JSON schema, inlines `$defs`/`$ref`, and removes validation-only keywords (`minLength`, `maxLength`, `minItems`, `maxItems`, `minimum`, `maximum`, `pattern`, `format`, `additionalProperties`, and similar) before sending it as `response_schema`. The full Pydantic model still validates the returned JSON locally.
+**Rationale:** A live run with the real `CaseAnalysisDraft` schema returned `400 INVALID_ARGUMENT` because Gemini rejects schemas with too many constraint states. A minimal schema probe passed; the stripped schema passed and the full workflow completed with 8/8 claims supported.
+**Consequence:** Agents keep one schema and no provider-specific code. The model may occasionally return more list items than the local maximum; structured retries and the verifier handle that, and the local schema remains authoritative.
