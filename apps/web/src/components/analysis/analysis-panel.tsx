@@ -1180,14 +1180,20 @@ function DocumentSelector({
 export function AnalysisPanel({
   caseId,
   documentCount,
+  initialDocIds,
+  initialFocus,
 }: {
   caseId: string;
   documentCount: number;
+  initialDocIds?: string[];
+  initialFocus?: string;
 }) {
   const queryClient = useQueryClient();
   const [workflowId, setWorkflowId] = useState<string | null>(null);
-  const [focus, setFocus] = useState("");
-  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+  const [focus, setFocus] = useState(initialFocus ?? "");
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>(
+    initialDocIds ?? [],
+  );
   const [source, setSource] = useState<AnalysisSourceRef | null>(null);
   const [exporting, setExporting] = useState<"html" | "markdown" | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);

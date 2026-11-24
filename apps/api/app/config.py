@@ -208,16 +208,46 @@ class Settings(BaseSettings):
     agent_max_workflow_attempts: int = 2
 
     # -----------------------------------------------------------------------
-    # Retrieval and legal-authority corpus (Stage 6)
+    # Retrieval and legal-authority corpus (Stage 7)
     # -----------------------------------------------------------------------
-    # Deterministic lexical retrieval is always on. Optional hashing embeddings
-    # provide a local, offline similarity signal; a real embedding provider can
-    # replace it behind the same interface.
-    retrieval_embeddings_enabled: bool = False
-    retrieval_embedding_dim: int = 256
-    retrieval_max_candidates: int = 400
-    # Precedent Explorer: no corpus by default. Set provider=json and a path to
-    # an operator-supplied corpus. Never invent authorities.
+    # Deterministic lexical retrieval is always on. Configurable embedding
+    # provider (hashing | gemini | openai | openai_compatible | none) supplies
+    # semantic vectors with consistent dimensions matching the vector index.
+    embedding_provider: Literal[
+        "hashing", "gemini", "openai", "openai_compatible", "none"
+    ] = Field(
+        default="hashing",
+        description=(
+            "Embedding provider: hashing (offline deterministic) | gemini | "
+            "openai | openai_compatible | none."
+        ),
+    )
+    embedding_model: str = Field(
+        default="",
+        description="Embedding model ID; defaults per provider when empty.",
+    )
+    embedding_api_key: str = Field(
+        default="",
+        description="Embedding API key; falls back to AI_API_KEY/GEMINI_API_KEY when empty.",
+    )
+    embedding_base_url: str = Field(
+        default="",
+        description="Optional base URL for openai_compatible embedding endpoints.",
+    )
+    embedding_timeout_s: float = Field(default=20.0, gt=0)
+
+    retrieval_embeddings_enabled: bool = True
+    retrieval_embedding_dim: int = Field(default=256, ge=32, le=3072)
+    retrieval_max_candidates: int = Field(default=400, ge=10, le=2000)
+    retrieval_default_limit: int = Field(default=10, ge=1, le=50)
+    retrieval_max_limit: int = Field(default=50, ge=1, le=100)
+    retrieval_max_query_chars: int = Field(default=500, ge=50, le=2000)
+    retrieval_rrf_k: int = Field(default=60, ge=1, le=200)
+    retrieval_lexical_weight: float = Field(default=0.5, ge=0.0, le=1.0)
+    retrieval_semantic_weight: float = Field(default=0.5, ge=0.0, le=1.0)
+    retrieval_rerank_enabled: bool = True
+
+    # Legal-source provider: none (fixture only) | json | database | fixture
     legal_corpus_provider: str = "none"
     legal_corpus_path: str = ""
 

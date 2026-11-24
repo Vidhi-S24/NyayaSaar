@@ -26,7 +26,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6 pb-10">
-      <DemoNotice message="Profile editing is not yet persisted. Authentication, cases, documents, and Stage 5 case analysis are live." />
+      <DemoNotice message="Profile editing is not yet persisted. Authentication, cases, documents, Stage 6 Case Intelligence, and Stage 7 Legal Research are live." />
 
       <PageHeader
         title="Settings"
@@ -40,8 +40,8 @@ export default function SettingsPage() {
             {[
               { icon: User, label: "Profile" },
               { icon: Key, label: "API & Integrations", note: "Live" },
-              { icon: Bell, label: "Notifications", note: "Stage 4" },
-              { icon: Shield, label: "Security & Privacy", note: "Stage 4" },
+              { icon: Bell, label: "Notifications", note: "Future stage" },
+              { icon: Shield, label: "Security & Privacy", note: "Future stage" },
             ].map(({ icon: Icon, label, note }) => (
               <li key={label}>
                 <button

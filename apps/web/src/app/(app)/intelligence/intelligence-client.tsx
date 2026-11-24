@@ -22,8 +22,12 @@ import { ApiClientError } from "@/lib/api-client";
 
 export function IntelligenceClient({
   initialCaseId,
+  initialDocIds,
+  initialFocus,
 }: {
   initialCaseId?: string;
+  initialDocIds?: string[];
+  initialFocus?: string;
 }) {
   const [caseId, setCaseId] = useState(initialCaseId ?? "");
 
@@ -160,6 +164,8 @@ export function IntelligenceClient({
             key={selected.id}
             caseId={selected.id}
             documentCount={selected.documents_count}
+            initialDocIds={selected.id === initialCaseId ? initialDocIds : undefined}
+            initialFocus={selected.id === initialCaseId ? initialFocus : undefined}
           />
         </>
       )}

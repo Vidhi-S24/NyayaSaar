@@ -496,3 +496,93 @@ export const SUPPORTED_DOCUMENT_TYPES = [
   "text/plain",
 ] as const;
 
+
+
+// ---------------------------------------------------------------------------
+// Hybrid Legal Retrieval (Stage 7)
+// ---------------------------------------------------------------------------
+
+export type RetrievalSourceType = "all" | "case_document" | "legal_authority";
+
+export interface RetrievalFilters {
+  case_id?: string | null;
+  source_type?: RetrievalSourceType;
+  jurisdiction?: string | null;
+  court?: string | null;
+  date_from?: string | null;
+  date_to?: string | null;
+  source_provider?: string | null;
+}
+
+export interface RetrievalSearchRequest {
+  query: string;
+  filters?: RetrievalFilters;
+  limit?: number;
+  use_rerank?: boolean | null;
+}
+
+export interface RetrievalResultItem {
+  result_id: string;
+  source_type: "case_document" | "legal_authority";
+  source_id: string;
+  title: string;
+  text: string;
+  case_id: string | null;
+  document_id: string | null;
+  record_id: string | null;
+  citation: string | null;
+  page_number: number | null;
+  paragraph_number: number | null;
+  jurisdiction: string | null;
+  court: string | null;
+  decision_date: string | null;
+  source_url: string | null;
+  source_provider: string;
+  lexical_score: number;
+  semantic_score: number;
+  hybrid_score: number;
+  rerank_score: number | null;
+  is_fixture: boolean;
+  has_injection_signals: boolean;
+  metadata: Record<string, unknown>;
+}
+
+export interface RetrievalSearchResponse {
+  query: string;
+  items: RetrievalResultItem[];
+  total_candidates: number;
+  deduplicated_count: number;
+  retrieval_method: string;
+  embedding_provider: string;
+  embedding_model: string | null;
+  corpus_provider: string;
+  corpus_configured: boolean;
+  fixture_used: boolean;
+  reranked: boolean;
+  notes: string[];
+  score_disclaimer: string;
+  untrusted_notice: string;
+}
+
+export interface RetrievalStatus {
+  embedding_provider: string;
+  embedding_model: string | null;
+  embedding_dimensions: number;
+  embeddings_enabled: boolean;
+  vector_backend: "pgvector" | "sqlite_json";
+  corpus_provider: string;
+  corpus_configured: boolean;
+  fixture_active: boolean;
+  rerank_enabled: boolean;
+  max_query_chars: number;
+  max_limit: number;
+}
+
+export interface CaseIndexResponse {
+  case_id: string;
+  total_chunks: number;
+  indexed_chunks: number;
+  embedding_provider: string;
+  embedding_model: string | null;
+  dimensions: number;
+}

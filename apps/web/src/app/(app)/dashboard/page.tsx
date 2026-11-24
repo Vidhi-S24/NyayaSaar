@@ -90,7 +90,7 @@ export default function DashboardPage() {
           label="Contradictions Found"
           value="—"
           icon={<AlertTriangle className="h-4 w-4" />}
-          trend="Planned for Stage 6"
+          trend="Planned for Stage 8"
         />
       </div>
 
@@ -211,13 +211,14 @@ export default function DashboardPage() {
         <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Intelligence Modules
         </p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {[
             { href: "/intelligence", label: "Case Intelligence", desc: "Run source-linked analysis", stage: "Live" },
-            { href: "/contradictions", label: "Contradiction & Gap", desc: "Detect conflicts, missing evidence", stage: "Stage 6" },
-            { href: "/precedents", label: "Precedent Explorer", desc: "Search legal authorities", stage: "Stage 6" },
-            { href: "/advocate", label: "Advocate Mode", desc: "Build opposing arguments", stage: "Stage 6" },
-            { href: "/judge", label: "Judge / Clerk", desc: "Audit reasoning and coverage", stage: "Stage 6" },
+            { href: "/research", label: "Legal Research", desc: "Hybrid lexical & semantic search", stage: "Live" },
+            { href: "/contradictions", label: "Contradiction & Gap", desc: "Detect conflicts, missing evidence", stage: "Stage 8" },
+            { href: "/precedents", label: "Precedent Explorer", desc: "Search legal authorities", stage: "Future stage" },
+            { href: "/advocate", label: "Advocate Mode", desc: "Build opposing arguments", stage: "Future stage" },
+            { href: "/judge", label: "Judge / Clerk", desc: "Audit reasoning and coverage", stage: "Future stage" },
           ].map((mod) => (
             <Link
               key={mod.href}

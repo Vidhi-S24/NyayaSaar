@@ -9,7 +9,7 @@ export const metadata = { title: "Contradiction & Gap Hunter" };
 export default function ContradictionsPage() {
   return (
     <div className="flex flex-col gap-6 p-6 pb-10">
-      <DemoNotice message="Contradiction & Gap Hunter is planned for Stage 6. Stage 5 case analysis is available now under Case Intelligence — facts, legal issues, timeline, and source verification." />
+      <DemoNotice message="Contradiction & Gap Hunter is planned for Stage 8. Stage 6 Case Intelligence and Stage 7 Legal Research are available now." />
 
       <PageHeader
         title="Contradiction & Gap Hunter"

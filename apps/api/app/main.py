@@ -22,6 +22,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+import app.db.models  # noqa: F401 - register all models on Base.metadata
 from app.ai.registry import resolve_ai_config
 from app.config import get_settings
 from app.models.responses import ApiResponse
@@ -31,6 +32,7 @@ from app.routers import cases as cases_router
 from app.routers import documents as documents_router
 from app.routers import analysis as analysis_router
 from app.routers import ai as ai_router
+from app.routers import retrieval as retrieval_router
 from app.services.analysis import WorkflowRunner, recover_stale_workflows
 
 settings = get_settings()
@@ -104,6 +106,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "configure PostgreSQL for production."
         )
         try:
+            import sqlalchemy as sa
             from sqlalchemy import inspect
 
             from app.db.base import Base, async_engine
@@ -120,6 +123,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 "case_memberships",
                 "documents",
                 "document_chunks",
+                "legal_records",
+                "legal_record_chunks",
                 "workflow_runs",
             }
             missing_tables = required_tables - set(tables)
@@ -131,6 +136,54 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 )
                 async with async_engine.begin() as conn:
                     await conn.run_sync(Base.metadata.create_all)
+
+            # Ensure Stage 6 & 7 columns exist on pre-existing dev SQLite DBs.
+            def _get_table_columns(sync_conn, table_name: str) -> set[str]:
+                return {
+                    col["name"]
+                    for col in inspect(sync_conn).get_columns(table_name)
+                }
+
+            for table_name, expected_cols in (
+                (
+                    "workflow_runs",
+                    (
+                        ("workflow_version", "VARCHAR(40)"),
+                        ("prompt_version", "VARCHAR(80)"),
+                        ("result_schema_version", "VARCHAR(40)"),
+                    ),
+                ),
+                (
+                    "document_chunks",
+                    (
+                        ("embedding_json", "JSON"),
+                        ("embedding_model", "VARCHAR(100)"),
+                        ("embedding_dim", "INTEGER"),
+                    ),
+                ),
+            ):
+                async with async_engine.connect() as conn:
+                    existing_cols = await conn.run_sync(
+                        lambda sc, tn=table_name: _get_table_columns(sc, tn)
+                    )
+                missing_cols = [
+                    (name, col_type)
+                    for name, col_type in expected_cols
+                    if name not in existing_cols
+                ]
+                if missing_cols:
+                    logger.info(
+                        "Dev database %s is missing columns %s — adding them.",
+                        table_name,
+                        ", ".join(name for name, _ in missing_cols),
+                    )
+                    async with async_engine.begin() as conn:
+                        for name, col_type in missing_cols:
+                            await conn.execute(
+                                sa.text(
+                                    f"ALTER TABLE {table_name} ADD COLUMN {name} {col_type}"
+                                )
+                            )
         except Exception as exc:
             logger.error("Dev database schema check failed: %s", exc)
 
@@ -279,6 +332,7 @@ def create_app() -> FastAPI:
     app.include_router(documents_router.router, prefix=API_PREFIX)
     app.include_router(analysis_router.router, prefix=API_PREFIX)
     app.include_router(ai_router.router, prefix=API_PREFIX)
+    app.include_router(retrieval_router.router, prefix=API_PREFIX)
 
     # Convenience alias for probes/tools that expect /health at the root.
     @app.get("/health", include_in_schema=False)

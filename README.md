@@ -164,8 +164,9 @@ From `apps/api/` (with the venv active):
 | 4 | Document ingestion pipeline | ✅ Complete |
 | 5 | Provider-agnostic AI + LangGraph case analysis | ✅ Complete |
 | 6 | Case Intelligence module (source-grounded workflow, chronology, verifier, export) | ✅ Complete |
-| 7 | Hybrid retrieval, legal-source provider layer & remaining analysis modules | ⏳ Pending |
-| 8 | Evaluation, monitoring, and deployment | ⏳ Pending |
+| 7 | Hybrid legal retrieval, pgvector, legal-source providers, and Legal Research UI | ✅ Complete |
+| 8 | Contradiction & Gap Hunter, Precedent Explorer, Advocate & Judge/Clerk modes | ⏳ Pending |
+| 9 | Evaluation, monitoring, and deployment | ⏳ Pending |
 
 ---
 

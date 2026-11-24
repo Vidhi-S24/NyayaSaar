@@ -121,6 +121,14 @@ class DocumentChunk(Base):
     extracted_text: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # Approximate character count (not byte count — text is Unicode)
     char_count: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    # Stage 7 hybrid retrieval embedding metadata (portable JSON + Postgres pgvector)
+    embedding_json: Mapped[list[float] | None] = mapped_column(
+        sa.JSON, nullable=True
+    )
+    embedding_model: Mapped[str | None] = mapped_column(
+        sa.String(100), nullable=True
+    )
+    embedding_dim: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True),
         nullable=False,

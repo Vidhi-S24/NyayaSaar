@@ -1,10 +1,33 @@
 # NyayaSaar — Implementation Status
 
-> Updated: Stage 6 Case Intelligence module complete
+> Updated: Stage 7 Hybrid Legal Retrieval complete
 
 ---
 
 ## Completed stages
+
+### Stage 7 — Hybrid Legal Retrieval ✅
+
+**Completed:** 2026-11-25
+*(See `stage-handoffs/stage-7.md` for full details, commands, and limitations)*
+
+**Scope:** Stage 7 **Hybrid Legal Retrieval & Legal-Source Provider Layer only**. Contradiction & Gap Hunter (Stage 8), Precedent Explorer conflict graphs, Advocate Mode, and Judge/Clerk Mode remain future work.
+
+#### What was built
+
+| Path | Description |
+|---|---|
+| `apps/api/alembic/versions/005_add_hybrid_retrieval.py` | Migration `005`: `legal_records` & `legal_record_chunks`, `document_chunks` embedding metadata, and PostgreSQL `pgvector` (`vector(256)` + HNSW) & `tsvector` GIN indexes |
+| `apps/api/app/db/models/legal_record.py`, `document.py` | `LegalRecord`, `LegalRecordChunk`, and embedding metadata columns on `DocumentChunk` |
+| `apps/api/app/ai/embeddings.py` | Configurable `EmbeddingProvider` (`hashing`, `gemini`, `openai`, `openai_compatible`, `none`) with dimension-consistency validation |
+| `apps/api/app/services/legal_corpus.py` | `LegalCorpusProvider` interface with `JsonCorpusProvider`, `FixtureCorpusProvider` (`is_fixture=True`), and `NullCorpusProvider` |
+| `apps/api/app/services/retrieval/` | `chunking.py` (offsets + paragraphs), `ingestion.py` (`ingest_legal_record`, `index_case_documents`), `hybrid.py` (PostgreSQL FTS+pgvector / SQLite BM25+cosine, RRF, deterministic reranker, deduplication, metadata filters, injection flagging), `evaluation.py` (`recall_at_k`, `mean_reciprocal_rank`) |
+| `apps/api/app/routers/retrieval.py`, `schemas/retrieval.py` | Authenticated `/api/v1/retrieval/{status,search,cases/{case_id}/index,records,records/{id}}` endpoints |
+| `packages/shared/src/index.ts`, `apps/web/src/lib/api/retrieval.ts` | Shared TypeScript contracts and typed retrieval API client |
+| `apps/web/src/app/(app)/research/` | Legal Research workspace: query, case scope, metadata filters, fixture/provider status banner, source inspection dialog, and "Send selected to Case Intelligence" |
+| `apps/api/tests/test_hybrid_retrieval.py`, `apps/web/src/lib/api/retrieval.test.ts` | Deterministic retrieval, filter, authorization, injection-flagging, and Recall@K/MRR evaluation tests |
+
+---
 
 ### Stage 6 — Case Intelligence module ✅
 

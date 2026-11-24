@@ -14,6 +14,7 @@ import {
   History,
   Settings,
   ChevronRight,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -25,6 +26,7 @@ const navItems = [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/cases", label: "Cases", icon: FolderOpen },
       { href: "/documents", label: "Documents", icon: FileText },
+      { href: "/research", label: "Legal Research", icon: Search },
     ],
   },
   {

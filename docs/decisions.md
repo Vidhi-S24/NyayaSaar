@@ -349,3 +349,25 @@
 **Decision:** Stage 6 completion is evidenced by the deterministic suite, migration round-trip, frontend checks, and a mock-provider HTTP smoke test. A real-provider run is reported as a separate, explicitly labelled result. If the provider returns `503 UNAVAILABLE` or the local key is absent, the handoff must say so and must not describe live analysis as verified.
 **Rationale:** The live attempt reached the configured Gemini endpoint but failed before any model output (`provider_unavailable`, `llm_calls=0`). Gemini returned `503` "model is currently experiencing high demand" for the full analyst request across several model IDs, and later the local `AI_API_KEY` was no longer present in `apps/api/.env`. Mock success is not evidence that a real provider call works.
 **Consequence:** The product remains fully testable without a key, but first deployment must repeat the live smoke test in `docs/stage-handoffs/stage-6.md` §5 and record the actual provider/model result.
+
+
+### D-045: Hybrid retrieval uses Reciprocal Rank Fusion (RRF) over PostgreSQL FTS + pgvector (with SQLite fallback)
+
+**Date:** Stage 7
+**Decision:** `app/services/retrieval/hybrid.py` combines lexical search (PostgreSQL `to_tsvector`/`ts_rank_cd` or deterministic BM25 on SQLite) and semantic similarity (PostgreSQL `pgvector` cosine distance or exact cosine similarity on JSON vectors) via Reciprocal Rank Fusion (`k=60`), followed by an optional deterministic token/phrase reranker and provenance-key deduplication.
+**Rationale:** RRF is parameter-stable, requires no score calibration across incompatible lexical and cosine distributions, and degrades cleanly when embeddings are disabled or when running against the SQLite dev fallback.
+**Consequence:** Every search result exposes `lexical_score`, `semantic_score`, `hybrid_score`, and `rerank_score` alongside an explicit disclaimer that similarity scores never establish legal authority or binding status.
+
+### D-046: Embedding provider is separate from LLMProvider and enforces vector-index dimension consistency
+
+**Date:** Stage 7
+**Decision:** `app/ai/embeddings.py` introduces `EmbeddingProvider` (`hashing`, `gemini`, `openai`, `openai_compatible`, `none`) independent of `LLMProvider`. Returned vectors are validated against `RETRIEVAL_EMBEDDING_DIM` (`256` by default, matching migration `005` `vector(256)`).
+**Rationale:** Chat models and embedding models evolve on different schedules, and mismatched vector dimensions break `pgvector` HNSW indexes. A deterministic `HashingEmbeddingProvider` keeps local dev and CI zero-network and reproducible.
+**Consequence:** Operators can switch to Gemini (`gemini-embedding-001` with `output_dimensionality=256`) or OpenAI-compatible embeddings via env vars without code changes.
+
+### D-047: Legal-source provider layer defaults to clearly-labelled fixtures when unconfigured
+
+**Date:** Stage 7
+**Decision:** `app/services/legal_corpus.py` implements `LegalCorpusProvider` with `JsonCorpusProvider`, `DatabaseCorpusProvider` (via `legal_records`), and `FixtureCorpusProvider`. When `LEGAL_CORPUS_PROVIDER=none`, fixture records are returned only with `is_fixture=True` and `[SAMPLE FIXTURE — NOT A REAL CITATION]` labels.
+**Rationale:** NyayaSaar never fabricates legal authorities or scrapes restricted databases. Unconfigured deployments must remain usable while making fixture status unmistakable.
+**Consequence:** Adding a future licensed legal database requires only implementing `LegalCorpusProvider.search_records` without modifying retrieval or UI contracts.
