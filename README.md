@@ -137,7 +137,7 @@ From `apps/api/` (with the venv active):
 
 | Command | Description |
 |---|---|
-| `python -m pytest tests/` | Run all backend tests (127 passing as of Stage 5) |
+| `python -m pytest tests/ --ignore=tests/test_gemini_connection.py` | Run deterministic backend tests (163 passing as of Stage 6) |
 | `alembic upgrade head` | Apply database migrations (needs `DATABASE_SYNC_URL`) |
 | `python -m scripts.seed_demo` | Seed a demo user + labelled [DEMO] sample cases (idempotent) |
 | `uvicorn app.main:app --reload --port 8000` | Start the API |
@@ -163,8 +163,9 @@ From `apps/api/` (with the venv active):
 | 3 | Database, authentication, and user management | ✅ Complete |
 | 4 | Document ingestion pipeline | ✅ Complete |
 | 5 | Provider-agnostic AI + LangGraph case analysis | ✅ Complete |
-| 6 | Retrieval and legal analysis modules | ⏳ Pending |
-| 7 | Evaluation, monitoring, and deployment | ⏳ Pending |
+| 6 | Case Intelligence module (source-grounded workflow, chronology, verifier, export) | ✅ Complete |
+| 7 | Hybrid retrieval, legal-source provider layer & remaining analysis modules | ⏳ Pending |
+| 8 | Evaluation, monitoring, and deployment | ⏳ Pending |
 
 ---
 
