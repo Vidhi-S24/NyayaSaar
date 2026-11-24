@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Case Intelligence — live Stage 5 workflow.
+ * Case Intelligence — live Stage 6 workflow.
  *
  * Analysis is case-scoped, so this page selects a case and renders the real
  * AnalysisPanel. No demo data and no simulated progress.
@@ -55,7 +55,7 @@ export function IntelligenceClient({
     <div className="flex flex-col gap-6 p-6 pb-10">
       <PageHeader
         title="Case Intelligence"
-        description="Extract source-linked facts and legal issues from a case's uploaded documents, with a deterministic verification pass."
+        description="Build a source-grounded case analysis from selected documents, with entities, chronology, legal questions, uncertainty flags, and a deterministic verification pass."
         actions={
           <Button size="sm" variant="teal" asChild>
             <Link href={selected ? `/cases/${selected.id}` : "/cases"}>
@@ -67,10 +67,10 @@ export function IntelligenceClient({
       />
 
       <div className="rounded-md border border-teal-200 bg-teal-50 px-3.5 py-3 text-xs text-teal-900">
-        <strong>Stage 5 case analysis is live.</strong> It reads only the selected
-        case&apos;s ready documents and cites document IDs and page numbers. External
-        authority research, contradictions, precedent, advocate, and judge modules
-        remain Stage 6 work.
+        <strong>Stage 6 Case Intelligence is live.</strong> It reads only the selected
+        case&apos;s ready documents, preserves document IDs and page numbers, and flags
+        anything the verifier could not support. External authority research,
+        contradictions, precedent, advocate, and judge modules remain later-stage work.
       </div>
 
       {casesQuery.isLoading && (

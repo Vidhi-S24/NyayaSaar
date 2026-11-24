@@ -206,3 +206,50 @@ export const apiClient = {
 
 export { ApiClientError };
 
+/**
+ * Download a binary/text response (for exports) with the bearer token.
+ *
+ * The shared JSON helpers assume an envelope; exports are raw files, so this
+ * reads the blob and filename directly.
+ */
+export async function downloadRequest(
+  path: string,
+  params?: Record<string, string | number | boolean | undefined>,
+): Promise<{ blob: Blob; filename: string }> {
+  let url = `${API_BASE_URL}${path}`;
+  if (params) {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+    if (qs) url += `?${qs}`;
+  }
+
+  const res = await fetch(url, {
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+  });
+
+  if (res.status === 401 && unauthorizedHandler) {
+    unauthorizedHandler();
+  }
+
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      message = body?.error?.message ?? body?.detail ?? message;
+    } catch {
+      // Response was not JSON; keep the status message.
+    }
+    throw new ApiClientError(message, res.status, "download_failed");
+  }
+
+  const disposition = res.headers.get("content-disposition") ?? "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  return {
+    blob: await res.blob(),
+    filename: match?.[1] ?? "nyayasaar-report",
+  };
+}
+

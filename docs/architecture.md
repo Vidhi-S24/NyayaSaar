@@ -1,6 +1,6 @@
 # NyayaSaar — Architecture
 
-> Last updated: Stage 5 — Provider-agnostic AI and LangGraph case analysis
+> Last updated: Stage 6 — Case Intelligence module (document-grounded multi-agent analysis)
 
 ---
 
@@ -31,10 +31,10 @@ NyayaSaar is a multi-agent legal case intelligence platform with a clear separat
 │  apps/api — FastAPI + LangGraph                                │
 │                                                                │
 │  ┌─────────────────┐   ┌─────────────────────────────────┐   │
-│  │  FastAPI routes │   │  LangGraph case-analysis graph   │   │
-│  │  /api/v1/*      │──▶│  orchestrator → analyst →        │   │
-│  │  Pydantic I/O   │   │  deterministic verifier → final  │   │
-│  │  Auth (Stage 3) │   │  (bounded retries/timeouts)      │   │
+│  │  FastAPI routes │   │  LangGraph case-intelligence     │   │
+│  │  /api/v1/*      │──▶│  orchestrator → case_analyst →   │   │
+│  │  Pydantic I/O   │   │  evidence_analyst → chronology → │   │
+│  │  Auth (Stage 3) │   │  verifier → finalize             │   │
 │  └─────────────────┘   └──────────────┬──────────────────┘   │
 │                                       │                      │
 │  Background (Stage 5)                 │ LLMProvider interface│
@@ -83,7 +83,7 @@ Browser
   → Frontend polls /api/v1/documents/{id}/status
 ```
 
-### Legal analysis workflow (Stage 5)
+### Legal analysis workflow (Stage 6 Case Intelligence)
 
 ```
 Browser
@@ -91,24 +91,179 @@ Browser
   → FastAPI verifies case ownership, creates a queued workflow_runs row
   → returns 202 + workflow_id (no long synchronous request)
   → FastAPI BackgroundTasks invokes the bounded runner
-      → load ready DocumentChunk pages (bounded character budget)
+      → load ready DocumentChunk pages (round-robin, de-duplicated, char budget)
       → LangGraph:
           orchestrator ──(no usable sources)──────────────→ finalize
                │
-               └→ case_analyst (LLMProvider, structured JSON)
-                       │
-                       └→ verifier (deterministic, no model call)
-                              ├─ unsupported/partial + budget left → case_analyst
-                              └─ verified / budget exhausted → finalize
-      → verified result + steps + token usage saved to workflow_runs
+               ├→ case_analyst   (facts/parties/entities/dates/procedure/amounts)
+               │       │
+               │       └→ evidence_analyst (issues/questions/uncertainty)
+               │               │
+               │               └→ chronology_builder (deterministic, no model)
+               │                       │
+               │                       └→ verifier (deterministic, no model)
+               │                              ├─ unsupported/partial + budget → case_analyst
+               │                              │                                  or evidence_analyst
+               │                              └─ verified / budget exhausted ──→ finalize
+      → verified result + versions + steps + token usage saved to workflow_runs
   → Frontend polls GET /api/v1/cases/{case_id}/analysis/{workflow_id}
-  → Result includes document_id + page_number for every source reference
+  → Result includes document_id + page_number (+ span) for every source reference
   → Failed runs can be re-queued with POST .../analysis/{workflow_id}/retry
+  → GET .../analysis/{workflow_id}/report?format=html|markdown exports the
+    persisted verified result (no model call)
 ```
 
 ---
 
+## Stage 6 — Case Intelligence module
+
+Stage 6 extends the Stage 5 graph in place rather than replacing it. It adds a
+second specialist model call, deterministic chronology assembly, richer source
+planning, source-span verification, persisted version metadata, report export,
+and a full Case Intelligence workspace.
+
+### Graph topology (`apps/api/app/agents/graph.py`)
+
+```
+START → orchestrator
+orchestrator ─┬─(insufficient sources)──────────────→ finalize
+              └─→ case_analyst
+case_analyst ─┬─(error/budget)──────────────────────→ finalize
+              └─→ evidence_analyst
+evidence_analyst ─┬─(error/budget)──────────────────→ finalize
+                  └─→ chronology_builder
+chronology_builder → verifier
+verifier ─┬─(revision needed, target=case_analyst)────→ case_analyst
+          ├─(revision needed, target=evidence_analyst)→ evidence_analyst
+          └─(verified or budget exhausted)───────────→ finalize
+finalize → END
+```
+
+| Node | Model call | Responsibility |
+|---|---|---|
+| `orchestrator` | no | Source planning, budget init, honest insufficient-source exit |
+| `case_analyst` | yes | Facts, parties/entities, dates, procedural events, amounts |
+| `evidence_analyst` | yes | Legal issues, evidence questions, uncertainties, inferences |
+| `chronology_builder` | no | Deterministic date normalisation, ordering, ambiguity flags |
+| `verifier` | no | Quote/span verification, support classification, revision request |
+| `finalize` | no | Verified result assembly, version stamping, sanitised failure |
+
+### Typed state (`apps/api/app/agents/state.py`)
+
+```
+CaseAnalysisState (TypedDict, JSON-serialisable)
+  identity: workflow_id, case_id, started_at
+  inputs:   case_context, sources[], source_notes[], source_stats
+  provider: provider_name, model_name, is_mock
+  drafts:   extraction_draft, evidence_draft, draft, chronology[]
+  outputs:  result
+  control:  status, current_step, progress, outcome, errors, notes
+  revision: retry_count, needs_revision, revision_target, verification_feedback
+  budgets:  llm_calls, token_usage, token_budget_exhausted
+```
+
+### Source planning (`apps/api/app/agents/tools/sources.py`)
+
+- Round-robin page selection across documents so one long file cannot starve a case.
+- Duplicate page suppression (`duplicate_pages_skipped`).
+- `AGENT_MIN_SOURCE_CHARS` (default 40): shorter pages are analysed but flagged.
+- Per-document stats: failed extraction, incomplete extraction, OCR required,
+  instruction-like text, truncated/omitted content.
+
+### Verification and citations
+
+`verifier.py` normalises whitespace/case and searches each claimed quote in the
+analysed excerpt. Support is `supported`, `partially_supported` (source cited,
+quote not located), or `unsupported`. Verified quotes carry character offsets
+relative to the analysed excerpt so the UI can highlight them. At most one
+revision is requested by default (`AGENT_MAX_VERIFIER_RETRIES=1`) and is routed
+back to the specialist that produced the unsupported content.
+
+Parties are verified records (`VerifiedParty`) with a name, optional procedural
+role, source references, support status, and confidence. They are checked by the
+same deterministic reference verifier as facts and entities, so a party name
+cannot appear in the result without a resolvable document/page reference (D-043).
+
+Citations always resolve to a real `document_id` and `page_number` from the
+loaded source manifest. The UI never shows a page the verifier did not resolve.
+
+### Workflow data model (Alembic migration `004`)
+
+Migration `003` added `workflow_runs`; migration `004` adds:
+
+```
+workflow_runs
+────────────────────────────────────────────
+workflow_version      e.g. 6.1.0
+prompt_version        e.g. 2026-11-case-intelligence-v2
+result_schema_version e.g. 6.1
+```
+
+The same values are embedded in `CaseAnalysisResult`, so a stored report remains
+auditable after prompts or topology change.
+
+### API surface (all authenticated, case-ownership enforced)
+
+```
+POST /api/v1/cases/{case_id}/analysis                     → 202 queued run
+GET  /api/v1/cases/{case_id}/analysis                     → recent runs
+GET  /api/v1/cases/{case_id}/analysis/{workflow_id}       → status/result
+POST /api/v1/cases/{case_id}/analysis/{workflow_id}/retry → 202 re-queued
+GET  /api/v1/cases/{case_id}/analysis/{workflow_id}/report?format=html|markdown
+                                                          → persisted report
+GET  /api/v1/ai/status                                    → safe provider metadata
+```
+
+Report responses:
+
+- `format=html` — self-contained, escaped, print-ready document; served with
+  `CSP: default-src 'none'; style-src 'unsafe-inline'; img-src data:`.
+- `format=markdown` — `text/markdown` durable text export.
+
+Neither format calls a model; both render only the persisted verified result.
+
+### Frontend
+
+`components/analysis/analysis-panel.tsx` is the Case Intelligence workspace:
+
+- Configuration: document selector (ready documents), optional analyst focus.
+- Live progress: queued/running steps polled from the API; no simulated progress.
+- Verification panel: supported / partial / unsupported counts and rate.
+- Executive summary, parties/entities, amounts, source facts, procedural history,
+  chronology (with ambiguity flags), legal issues, evidence questions,
+  uncertainties, and model inferences — visually separated.
+- Source dialog: opens the real document page and highlights a verified quote
+  span when available; otherwise states the quote was not located.
+- Export: "Print / save PDF" (opens the self-contained HTML), HTML download,
+  and Markdown download.
+- Rerun and failure recovery use the real retry endpoint.
+
+`app/(app)/intelligence/intelligence-client.tsx` is the module entry point.
+
+### Security and honesty controls
+
+- API keys remain server-side only; versions and safe provider metadata are stored.
+- All document text is untrusted evidence; instruction-like text is flagged.
+- No external authorities are retrieved or invented; Stage 6 stays document-grounded.
+- Unsupported or unverified statements are labelled, never presented as verified.
+- Report HTML is escaped and locked down with CSP; Markdown is plain text.
+
+### Deferred beyond Stage 6 Case Intelligence
+
+- Hybrid retrieval (full-text + embeddings), contradiction/gap detection.
+- Precedent Explorer, authority corpus, provenance checks, precedent graphs.
+- Advocate Mode and Judge/Clerk Mode.
+- Durable queue/worker and cross-restart LangGraph checkpoint resume.
+- Server-side PDF generation (HTML print view is provided instead).
+- Real-provider smoke tests in CI (requires a key and network access).
+
+---
+
 ## Stage 5 — Provider-agnostic AI and LangGraph case analysis
+
+> **Historical:** this section describes the Stage 5 single-analyst graph. Stage 6
+> (above) supersedes its topology, state, and API surface while keeping the same
+> provider layer and `workflow_runs` persistence.
 
 ### Provider layer (`apps/api/app/ai/`)
 
@@ -371,6 +526,6 @@ See [decisions.md](decisions.md) for the rationale behind technology choices.
 | 3 ✅ | Database + Auth | PostgreSQL, Alembic, JWT authentication, ownership authorisation, live case CRUD |
 | 4 ✅ | Document ingestion | Upload, validation, extraction, chunking, storage abstraction, frontend UI |
 | 5 ✅ | Agentic workflows | Provider-agnostic AI layer, LangGraph case analysis, deterministic verifier, persisted runs, analysis UI |
-| 6 | Legal analysis | Full case intelligence, hybrid retrieval, contradictions, precedents, advocate/judge modules |
+| 6 ◐ | Legal analysis | **Case Intelligence module complete**: dual-specialist graph, chronology, span verification, version metadata, report export, workspace. Hybrid retrieval, contradictions, precedents, advocate/judge remain pending |
 | 7 | Evaluation + deploy | LangSmith, RAGAS, Render/Vercel config, CI |
 

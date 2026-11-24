@@ -286,3 +286,66 @@
 **Decision:** The Gemini adapter converts the agent's Pydantic output model to a JSON schema, inlines `$defs`/`$ref`, and removes validation-only keywords (`minLength`, `maxLength`, `minItems`, `maxItems`, `minimum`, `maximum`, `pattern`, `format`, `additionalProperties`, and similar) before sending it as `response_schema`. The full Pydantic model still validates the returned JSON locally.
 **Rationale:** A live run with the real `CaseAnalysisDraft` schema returned `400 INVALID_ARGUMENT` because Gemini rejects schemas with too many constraint states. A minimal schema probe passed; the stripped schema passed and the full workflow completed with 8/8 claims supported.
 **Consequence:** Agents keep one schema and no provider-specific code. The model may occasionally return more list items than the local maximum; structured retries and the verifier handle that, and the local schema remains authoritative.
+
+### D-036: Stage 6 splits model work into two specialist nodes
+
+**Date:** Stage 6
+**Decision:** Case Intelligence uses two model calls instead of one monolith: a **Case Analyst** (facts, entities, parties, dates, procedural history, amounts) and an **Evidence Analyst** (legal issues, evidence questions, uncertainties, inferences). A deterministic **chronology builder** merges dated items between them. The verifier can route one bounded revision back to whichever specialist produced unsupported content (`revision_target`).
+**Rationale:** One prompt doing extraction and legal issue-spotting produced shallow issue analysis and made verification feedback ambiguous. Splitting keeps each prompt's contract small, makes the JSON schemas easier for the model to satisfy, and lets retries target only the failing half of the draft.
+**Consequence:** The default `AGENT_MAX_LLM_CALLS` rises from 3 to 5 (two drafts + up to one revision + headroom). Graphs without a configured provider still return `insufficient_sources` before any call.
+
+### D-037: Chronology is built deterministically, not by the model
+
+**Date:** Stage 6
+**Decision:** `app/agents/nodes/chronology_builder.py` orders dated items using `app/agents/tools/dates.py`. Dates are normalised to ISO sort keys with a recorded precision (`day`/`month`/`year`) and an `ambiguous` flag. Numeric day/month order defaults to day-first but is explicitly flagged and annotated rather than silently guessed. Undated items are retained and marked as undated.
+**Rationale:** Timeline ordering is deterministic logic, so asking an LLM to sort dates adds cost and hallucination risk. Ambiguous dates (for example `05/06/2024`) must be visible to a lawyer, not resolved by assumption.
+**Consequence:** The chronology contains only dates present in the source drafts; it never invents an event or a date. Ambiguity notes surface in the UI and the report.
+
+### D-038: Source planning is fair, de-duplicated, and budget-bounded
+
+**Date:** Stage 6
+**Decision:** `load_case_sources` selects pages **round-robin across documents** so a long first file cannot starve the rest of the case. Identical page text is suppressed and counted (`duplicate_pages_skipped`). Pages below `AGENT_MIN_SOURCE_CHARS` (default 40, lowered from 120) are still analysed but flagged `short`; pages with no usable text are skipped. Per-document extraction completeness, failed extraction, OCR requirement, and instruction-like text are recorded in `SourceStats`/notes.
+**Rationale:** Sending duplicate text wastes tokens and can make the model over-weight repeated facts. Round-robin selection improves recall across a multi-document case. Lowering the short-page threshold admits genuinely useful short pages (for example a one-line order) while still flagging them.
+**Consequence:** Source selection is deterministic and testable (`tests/test_source_planner.py`). The result records exactly what was analysed, skipped, or truncated.
+
+### D-039: Verification is deterministic and records support categories plus spans
+
+**Date:** Stage 6
+**Decision:** The verifier normalises whitespace/case and searches the analysed excerpt for each claimed quote. Each item becomes `supported`, `partially_supported` (source cited but quote not found), or `unsupported`. When a quote is found, character offsets relative to the analysed excerpt are stored so the UI can highlight it. `VerificationSummary` counts each category. At most one revision is requested by default (`AGENT_MAX_VERIFIER_RETRIES=1`).
+**Rationale:** A second LLM verifying the first is neither reproducible nor auditable. Deterministic substring checks are testable, cheap, and honest: if a quote cannot be located, the product says so instead of implying verification.
+**Limitation:** Offsets are relative to the analysed excerpt/page prefix, not the full original file. The UI highlights only when `quote_verified` is true and the offsets are valid.
+
+### D-040: Report export is a self-contained HTML print view plus Markdown, from persisted results only
+
+**Date:** Stage 6
+**Decision:** `GET /api/v1/cases/{case_id}/analysis/{workflow_id}/report?format=html|markdown` renders the **persisted verified result**. HTML is escaped, self-contained, print-ready (browser "Print / Save as PDF"), and served with `CSP: default-src 'none'; style-src 'unsafe-inline'; img-src data:`. Markdown is served as `text/markdown`. No model is called during export and no new facts are introduced.
+**Rationale:** A PDF dependency adds weight and a new failure mode for a feature whose main need is a shareable, printable record. Rendering only the stored result keeps the export auditable and identical to what was reviewed on screen.
+**Consequence:** The frontend offers "Print / save PDF", "HTML report", and "Markdown"; all download real bytes from the API. Server-side PDF generation can be added later without changing the data contract.
+
+### D-041: Workflow, prompt, and result-schema versions are persisted
+
+**Date:** Stage 6
+**Decision:** Migration `004` adds `workflow_version`, `prompt_version`, and `result_schema_version` to `workflow_runs`; the same values are embedded in `CaseAnalysisResult`. Constants live in `app/agents/schemas.py` (`6.1.0`, `2026-11-case-intelligence-v2`, `6.1`).
+**Rationale:** A stored report must remain explainable after prompts or graph topology change. Persisting versions makes "which logic produced this report?" answerable without git archaeology.
+**Consequence:** Bump the constants whenever a prompt or result contract changes in a way that affects interpretation. The Stage 6 follow-up party-contract change bumped all three (D-043).
+
+### D-042: Stage 6 is wired in isolation; future-stage scaffolding stays unwired
+
+**Date:** Stage 6
+**Decision:** Only the Case Intelligence workflow is dispatched from `app/services/analysis.py`. Untracked future-stage files (`graphs_extended.py`, `schemas_extended.py`, contradiction/advocate/judge/precedent nodes and prompts) are **not imported**. Unknown workflow types fail with a clear `unsupported_workflow` error rather than falling through to a broken graph.
+**Rationale:** The future-stage files are incomplete (for example a missing `wrap_untrusted` helper) and importing them prevented application startup. Stage 6 scope explicitly excludes those modules.
+**Consequence:** The app starts cleanly and the Stage 6 test suite is deterministic. Those files remain user-owned and untouched for a later stage; they must be completed and explicitly wired before use.
+
+### D-043: Parties are verified source-linked records, not bare strings
+
+**Date:** Stage 6 follow-up
+**Decision:** `CaseAnalysisDraft.parties` and `CaseAnalysisResult.parties` are lists of structured party records (`DraftParty` / `VerifiedParty`) with `name`, optional `role` (for example Petitioner or Respondent), `source_refs`/`sources`, `support`, and `confidence`. The deterministic verifier checks each party reference exactly like facts and entities and records a `parties` verification category. The Case Analyst prompt requires a source marker and, where possible, a verbatim quote for every party. The result contract version moves to `6.1`, prompt to `2026-11-case-intelligence-v2`, and workflow to `6.1.0`.
+**Rationale:** Bare party names could not be traced to a document page, so they were the only extracted collection without a verifiable provenance. A lawyer must be able to open the page that names each party and see whether the quote was located.
+**Consequence:** API/shared consumers now read `party.name` instead of a string. Party records render with support badges and source chips in the workspace and report. The verifier routes a party-provenance failure back to the Case Analyst during the bounded revision.
+
+### D-044: Live Gemini verification is reported separately from deterministic verification
+
+**Date:** Stage 6 follow-up
+**Decision:** Stage 6 completion is evidenced by the deterministic suite, migration round-trip, frontend checks, and a mock-provider HTTP smoke test. A real-provider run is reported as a separate, explicitly labelled result. If the provider returns `503 UNAVAILABLE` or the local key is absent, the handoff must say so and must not describe live analysis as verified.
+**Rationale:** The live attempt reached the configured Gemini endpoint but failed before any model output (`provider_unavailable`, `llm_calls=0`). Gemini returned `503` "model is currently experiencing high demand" for the full analyst request across several model IDs, and later the local `AI_API_KEY` was no longer present in `apps/api/.env`. Mock success is not evidence that a real provider call works.
+**Consequence:** The product remains fully testable without a key, but first deployment must repeat the live smoke test in `docs/stage-handoffs/stage-6.md` §5 and record the actual provider/model result.

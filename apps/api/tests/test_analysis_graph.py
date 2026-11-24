@@ -38,10 +38,23 @@ def make_context(provider, *, max_retries=1):
         provider=provider,
         settings=Settings(ai_provider="mock", ai_model="fixture"),
         report=report,
-        max_llm_calls=3,
+        max_llm_calls=5,
         max_total_tokens=80_000,
         max_verifier_retries=max_retries,
     )
+
+
+def evidence():
+    """Empty but schema-valid Evidence Analyst draft."""
+    return {
+        "legal_issues": [],
+        "evidence_questions": [],
+        "ambiguities": [],
+        "inferences": [],
+        "unverified_hypotheses": [],
+        "missing_information": [],
+        "limitations": [],
+    }
 
 
 def make_state(sources, notes=None):
@@ -84,7 +97,7 @@ SOURCE = {
 def draft(claim, quote, summary="The agreement was signed by both parties."):
     return {
         "summary": summary,
-        "parties": ["Party A", "Party B"],
+        "parties": [],
         "facts": [
             {
                 "claim": claim,
@@ -104,7 +117,10 @@ def draft(claim, quote, summary="The agreement was signed by both parties."):
 @pytest.mark.asyncio
 async def test_graph_completes_and_preserves_source_references():
     provider = ScriptedProvider(
-        [draft("The agreement was signed on 1 May 2024.", "signed on 1 May 2024")]
+        [
+            draft("The agreement was signed on 1 May 2024.", "signed on 1 May 2024"),
+            evidence(),
+        ]
     )
     state = await run_case_analysis_graph(
         make_context(provider), make_state([SOURCE])
@@ -112,7 +128,7 @@ async def test_graph_completes_and_preserves_source_references():
 
     assert state["status"] == "completed"
     assert state["outcome"] == "completed"
-    assert provider.calls == 1
+    assert provider.calls == 2
     result = state["result"]
     assert result["is_mock"] is False
     assert result["facts"][0]["support"] == "supported"
@@ -155,13 +171,13 @@ async def test_graph_surfaces_provider_errors_without_leaking_details():
 async def test_graph_retries_once_when_claims_are_unsupported():
     first = draft("The agreement was signed in June 2024.", "signed in June 2024")
     second = draft("The agreement was signed on 1 May 2024.", "signed on 1 May 2024")
-    provider = ScriptedProvider([first, second])
+    provider = ScriptedProvider([first, evidence(), second, evidence()])
 
     state = await run_case_analysis_graph(
         make_context(provider, max_retries=1), make_state([SOURCE])
     )
 
-    assert provider.calls == 2
+    assert provider.calls == 4
     assert state["status"] == "completed"
     result = state["result"]
     assert result["verification"]["retried"] is True
@@ -172,13 +188,13 @@ async def test_graph_retries_once_when_claims_are_unsupported():
 async def test_graph_stops_after_verifier_retry_budget():
     first = draft("The agreement was signed in June 2024.", "signed in June 2024")
     second = draft("The agreement was signed in July 2024.", "signed in July 2024")
-    provider = ScriptedProvider([first, second])
+    provider = ScriptedProvider([first, evidence(), second, evidence()])
 
     state = await run_case_analysis_graph(
         make_context(provider, max_retries=1), make_state([SOURCE])
     )
 
-    assert provider.calls == 2
+    assert provider.calls == 4
     assert state["status"] == "completed"
     # The second draft is still unsupported but the retry budget is exhausted,
     # so the honest result is returned rather than looping.

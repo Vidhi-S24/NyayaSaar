@@ -1,13 +1,14 @@
-"""Case Analyst node.
+"""Case Analyst node (stage A of Case Intelligence).
 
 Calls the provider through the provider-agnostic interface, validates the
-structured draft, and records token usage. All prompt construction happens in
-``app.ai.prompts``; all provider details live behind ``LLMProvider``.
+structured extraction draft, and records token usage. All prompt construction
+happens in ``app.ai.prompts``; all provider details live behind ``LLMProvider``.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 
 from app.agents.context import WorkflowContext
 from app.agents.schemas import CaseAnalysisDraft
@@ -20,60 +21,116 @@ from app.ai.prompts.case_analysis import (
 
 logger = logging.getLogger("nyayasaar.agents.case_analyst")
 
+_DATE_RE = re.compile(
+    r"\b(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}"
+    r"|\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+,?\s+\d{4}"
+    r"|[A-Z][a-z]+\s+\d{1,2},?\s+\d{4})\b"
+)
+_AMOUNT_RE = re.compile(
+    r"(?:₹|Rs\.?|INR|USD|\$)\s?[\d,]+(?:\.\d{1,2})?(?:\s?(?:lakh|crore|million|billion))?",
+    re.IGNORECASE,
+)
+
 
 def _mock_fixture(state: CaseAnalysisState) -> dict:
     """Deterministic, clearly-labelled fixture with real source references."""
     sources = state.get("sources") or []
     facts: list[dict] = []
-    issues: list[dict] = []
-    inferences: list[dict] = []
+    entities: list[dict] = []
+    amounts: list[dict] = []
+    procedural: list[dict] = []
+    timeline: list[dict] = []
+    key_dates: list[dict] = []
 
-    for source in sources[:3]:
+    for source in sources[:4]:
         text = " ".join(str(source.get("text", "")).split())
         if not text:
             continue
         snippet = text[:200]
         quote = text[:140]
+        refs = [{"source_id": source["source_id"], "quote": quote}]
+
         facts.append(
             {
                 "claim": f"The supplied document states: {snippet}",
-                "source_refs": [{"source_id": source["source_id"], "quote": quote}],
+                "source_refs": refs,
                 "confidence": "medium",
             }
         )
-        if not issues:
-            issues.append(
+        entities.append(
+            {
+                "name": str(source.get("document_name", "Source document")),
+                "entity_type": "other",
+                "role": "Source document",
+                "source_refs": refs,
+                "confidence": "low",
+            }
+        )
+
+        amount_match = _AMOUNT_RE.search(text)
+        if amount_match:
+            amounts.append(
                 {
-                    "claim": (
-                        "The documents should be reviewed for the applicable legal "
-                        "issues; no external legal authority was consulted."
-                    ),
-                    "source_refs": [{"source_id": source["source_id"], "quote": quote}],
+                    "description": "Amount mentioned in the supplied document",
+                    "amount_text": amount_match.group(0),
+                    "source_refs": refs,
                     "confidence": "low",
                 }
             )
-            inferences.append(
+
+        date_match = _DATE_RE.search(text)
+        if date_match:
+            date_text = date_match.group(0)
+            timeline.append(
                 {
-                    "claim": (
-                        "This development fixture demonstrates the workflow and "
-                        "verification path; it is not legal analysis."
-                    ),
-                    "source_refs": [{"source_id": source["source_id"], "quote": quote}],
-                    "confidence": "low",
+                    "date_text": date_text,
+                    "event": f"Dated statement in the supplied document: {snippet[:160]}",
+                    "significance": "factual",
+                    "source_refs": refs,
                 }
             )
+            key_dates.append(
+                {
+                    "date_text": date_text,
+                    "label": "Date mentioned in the supplied document",
+                    "source_refs": refs,
+                }
+            )
+
+        lowered = text.lower()
+        for stage, keyword in (
+            ("Filing", "filed"),
+            ("Notice", "notice"),
+            ("Hearing", "hearing"),
+            ("Order", "order"),
+        ):
+            if keyword in lowered:
+                procedural.append(
+                    {
+                        "stage": stage,
+                        "description": f"The document refers to a {stage.lower()}.",
+                        "date_text": date_match.group(0) if date_match else None,
+                        "source_refs": refs,
+                    }
+                )
+                break
 
     return {
         "summary": (
             "[Development fixture] Prepared from "
             f"{len(sources)} source page(s). No AI model was called; this is a "
-            "deterministic fixture used to exercise the workflow interface."
+            "deterministic fixture used to exercise the Case Intelligence "
+            "workflow and verification interface."
         ),
         "parties": [],
+        "entities": entities,
+        "amounts": amounts,
         "facts": facts,
-        "legal_issues": issues,
-        "timeline": [],
-        "inferences": inferences,
+        "procedural_history": procedural,
+        "key_dates": key_dates,
+        "timeline": timeline,
+        "legal_issues": [],
+        "inferences": [],
         "unverified_hypotheses": [
             "No AI model was called. Configure AI_PROVIDER, AI_MODEL, and "
             "AI_API_KEY for substantive analysis."
@@ -90,7 +147,9 @@ def _mock_fixture(state: CaseAnalysisState) -> dict:
 
 def make_case_analyst_node(ctx: WorkflowContext):
     async def case_analyst(state: CaseAnalysisState) -> dict:
-        await ctx.report_step("case_analyst", 35, "Extracting facts and legal issues")
+        await ctx.report_step(
+            "case_analyst", 34, "Extracting facts, parties, entities, and dates"
+        )
 
         budget_code = ctx.budget_exceeded_code(state)
         if budget_code:
@@ -115,6 +174,7 @@ def make_case_analyst_node(ctx: WorkflowContext):
             max_output_tokens=ctx.settings.ai_max_output_tokens,
             timeout_s=ctx.settings.ai_timeout_s,
             mock_fixture=_mock_fixture(state) if ctx.provider.is_mock else None,
+            metadata={"stage": "case_analyst"},
         )
 
         try:
@@ -188,15 +248,17 @@ def make_case_analyst_node(ctx: WorkflowContext):
 
         return {
             "draft": draft.model_dump(),
+            "extraction_draft": draft.model_dump(),
             "status": "running",
-            "current_step": "verifier",
-            "progress": 65,
+            "current_step": "evidence_analyst",
+            "progress": 52,
             "outcome": None,
             "llm_calls": calls + 1,
             "token_usage": new_usage,
             "token_budget_exhausted": exhausted,
             "notes": notes,
             "needs_revision": False,
+            "revision_target": None,
         }
 
     return case_analyst

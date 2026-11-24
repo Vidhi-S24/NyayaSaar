@@ -1,4 +1,4 @@
-"""API schemas for Stage 5 analysis workflows."""
+"""API schemas for Stage 6 Case Intelligence workflows."""
 
 from __future__ import annotations
 
@@ -60,6 +60,9 @@ class WorkflowRunResponse(BaseModel):
     provider: str | None
     model: str | None
     is_mock: bool
+    workflow_version: str | None = None
+    prompt_version: str | None = None
+    result_schema_version: str | None = None
     document_ids: list[str] = Field(default_factory=list)
     focus: str | None = None
     result: CaseAnalysisResult | None = None
@@ -91,6 +94,9 @@ class WorkflowRunResponse(BaseModel):
             provider=run.provider,
             model=run.model,
             is_mock=run.is_mock,
+            workflow_version=run.workflow_version,
+            prompt_version=run.prompt_version,
+            result_schema_version=run.result_schema_version,
             document_ids=payload.get("document_ids") or [],
             focus=payload.get("focus"),
             result=run.result,

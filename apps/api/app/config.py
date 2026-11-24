@@ -200,11 +200,26 @@ class Settings(BaseSettings):
 
     # Agent execution budgets (bounded, auditable workflows)
     agent_execution_timeout_s: int = 120
-    agent_max_llm_calls: int = 3
+    agent_max_llm_calls: int = 5
     agent_max_input_chars: int = 24_000
+    agent_min_source_chars: int = 40
     agent_max_total_tokens: int = 80_000
     agent_max_verifier_retries: int = 1
     agent_max_workflow_attempts: int = 2
+
+    # -----------------------------------------------------------------------
+    # Retrieval and legal-authority corpus (Stage 6)
+    # -----------------------------------------------------------------------
+    # Deterministic lexical retrieval is always on. Optional hashing embeddings
+    # provide a local, offline similarity signal; a real embedding provider can
+    # replace it behind the same interface.
+    retrieval_embeddings_enabled: bool = False
+    retrieval_embedding_dim: int = 256
+    retrieval_max_candidates: int = 400
+    # Precedent Explorer: no corpus by default. Set provider=json and a path to
+    # an operator-supplied corpus. Never invent authorities.
+    legal_corpus_provider: str = "none"
+    legal_corpus_path: str = ""
 
     # -----------------------------------------------------------------------
     # Derived helpers

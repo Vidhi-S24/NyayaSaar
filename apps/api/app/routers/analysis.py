@@ -19,8 +19,10 @@ from fastapi import (
     Request,
     status,
 )
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.schemas import CaseAnalysisResult
 from app.config import get_settings
 from app.db.models.user import User
 from app.db.session import get_async_session
@@ -31,6 +33,7 @@ from app.schemas.analysis import (
     WorkflowRunResponse,
 )
 from app.services import analysis as analysis_service
+from app.services import report as report_service
 from app.services.auth import get_current_user
 
 logger = logging.getLogger("nyayasaar.routers.analysis")
@@ -187,4 +190,71 @@ async def retry_analysis(
     return ApiResponse.ok(
         WorkflowRunResponse.from_run(run),
         meta={"poll_after_ms": 1500},
+    )
+
+
+@router.get("/{workflow_id}/report")
+async def download_report(
+    case_id: str,
+    workflow_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    format: str = Query(default="html", pattern="^(html|markdown)$"),
+) -> Response:
+    """Download a completed analysis as a print-ready HTML or Markdown report.
+
+    The report is rendered from the persisted, verified result only. No model is
+    called and no new facts are added.
+    """
+    loaded = await analysis_service.get_run_and_case(
+        db,
+        workflow_id=workflow_id,
+        user_id=current_user.id,
+        case_id=case_id,
+    )
+    if loaded is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found."
+        )
+    case, run = loaded
+
+    if run.status != "completed" or not run.result:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The analysis has not completed, so a report is not available.",
+        )
+
+    try:
+        result = CaseAnalysisResult.model_validate(run.result)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="The stored analysis could not be read.",
+        )
+
+    if format == "markdown":
+        body = report_service.render_case_report_markdown(case, run, result)
+        filename = report_service.report_filename(case, run, "md")
+        return PlainTextResponse(
+            content=body,
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "private, no-store",
+            },
+        )
+
+    body = report_service.render_case_report_html(case, run, result)
+    filename = report_service.report_filename(case, run, "html")
+    return HTMLResponse(
+        content=body,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "private, no-store",
+            # The report is self-contained; block scripts entirely.
+            "Content-Security-Policy": (
+                "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+            ),
+            "X-Content-Type-Options": "nosniff",
+        },
     )

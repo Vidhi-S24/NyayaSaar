@@ -164,7 +164,7 @@ export interface DocumentTextPreview {
 export type DocumentStatus = DocumentProcessingStatus;
 
 // ---------------------------------------------------------------------------
-// Workflow / agent execution — Stage 5 (case-analysis workflows)
+// Workflow / agent execution — Stage 6 (Case Intelligence workflows)
 // ---------------------------------------------------------------------------
 
 export type WorkflowStatus = "queued" | "running" | "completed" | "failed";
@@ -192,7 +192,39 @@ export type AnalysisConfidence = "high" | "medium" | "low";
 
 export type AnalysisClaimType = "fact" | "legal_issue" | "inference";
 
-/** A verified reference to an exact document page supplied to the analyst. */
+export type AnalysisEntityType =
+  | "person"
+  | "organisation"
+  | "court"
+  | "location"
+  | "statute_or_regulation"
+  | "amount"
+  | "date"
+  | "other";
+
+export type AnalysisDatePrecision = "day" | "month" | "year" | "unknown";
+
+export type AnalysisTimelineSignificance =
+  | "procedural"
+  | "factual"
+  | "evidential"
+  | "other";
+
+export type AnalysisIssueType =
+  | "substantive"
+  | "procedural"
+  | "evidential"
+  | "remedial"
+  | "other";
+
+export type AnalysisUncertaintySeverity = "high" | "medium" | "low";
+
+/**
+ * A verified reference to an exact document page supplied to the analyst.
+ *
+ * `span_start`/`span_end` are offsets into the analysed excerpt only when the
+ * verifier located the quote deterministically; otherwise they are null.
+ */
 export interface AnalysisSourceRef {
   source_id: string;
   document_id: string;
@@ -200,6 +232,8 @@ export interface AnalysisSourceRef {
   page_number: number;
   quote: string | null;
   quote_verified: boolean;
+  span_start?: number | null;
+  span_end?: number | null;
 }
 
 export interface AnalysisClaim {
@@ -210,11 +244,87 @@ export interface AnalysisClaim {
   confidence: AnalysisConfidence;
 }
 
-export interface AnalysisTimelineEvent {
-  date_text: string;
-  event: string;
+export interface AnalysisParty {
+  name: string;
+  role: string | null;
   sources: AnalysisSourceRef[];
   support: AnalysisSupport;
+  confidence: AnalysisConfidence;
+}
+
+export interface AnalysisEntity {
+  name: string;
+  entity_type: AnalysisEntityType;
+  role: string | null;
+  sources: AnalysisSourceRef[];
+  support: AnalysisSupport;
+  confidence: AnalysisConfidence;
+}
+
+export interface AnalysisAmount {
+  description: string;
+  amount_text: string;
+  currency: string | null;
+  sources: AnalysisSourceRef[];
+  support: AnalysisSupport;
+  confidence: AnalysisConfidence;
+}
+
+export interface AnalysisProceduralEvent {
+  stage: string;
+  description: string;
+  date_text: string | null;
+  date_sort_key: string;
+  date_precision: AnalysisDatePrecision;
+  date_ambiguous: boolean;
+  forum: string | null;
+  sources: AnalysisSourceRef[];
+  support: AnalysisSupport;
+}
+
+export interface AnalysisTimelineEvent {
+  date_text: string;
+  date_sort_key: string;
+  date_precision: AnalysisDatePrecision;
+  date_ambiguous: boolean;
+  date_ambiguity_note: string | null;
+  event: string;
+  significance: AnalysisTimelineSignificance;
+  sources: AnalysisSourceRef[];
+  support: AnalysisSupport;
+}
+
+export interface AnalysisLegalIssue {
+  question: string;
+  why_it_matters: string;
+  issue_type: AnalysisIssueType;
+  sources: AnalysisSourceRef[];
+  support: AnalysisSupport;
+  confidence: AnalysisConfidence;
+}
+
+export interface AnalysisEvidenceQuestion {
+  question: string;
+  why_it_matters: string;
+  evidence_needed: string;
+  sources: AnalysisSourceRef[];
+  support: AnalysisSupport;
+}
+
+export interface AnalysisUncertainty {
+  statement: string;
+  reason: string;
+  severity: AnalysisUncertaintySeverity;
+  sources: AnalysisSourceRef[];
+  support: AnalysisSupport;
+}
+
+export interface AnalysisVerificationCategory {
+  category: string;
+  total: number;
+  supported: number;
+  partially_supported: number;
+  unsupported: number;
 }
 
 export interface AnalysisVerificationSummary {
@@ -223,8 +333,27 @@ export interface AnalysisVerificationSummary {
   partially_supported: number;
   unsupported: number;
   invalid_source_refs: number;
+  verified_spans: number;
+  unverified_quotes: number;
   retried: boolean;
+  categories: AnalysisVerificationCategory[];
   notes: string[];
+}
+
+export interface AnalysisSourceStats {
+  documents_available: number;
+  documents_analyzed: number;
+  pages_available: number;
+  pages_included: number;
+  characters_included: number;
+  duplicate_pages_skipped: number;
+  short_pages: number;
+  truncated_pages: number;
+  omitted_pages: number;
+  failed_documents: number;
+  ocr_required_documents: number;
+  incomplete_extraction_documents: number;
+  instruction_like_sources: number;
 }
 
 export interface AnalysisSourceManifestEntry {
@@ -233,6 +362,7 @@ export interface AnalysisSourceManifestEntry {
   document_name: string;
   page_number: number;
   truncated: boolean;
+  short: boolean;
 }
 
 /** Structured, source-linked analysis. AI-assisted, never legal advice. */
@@ -243,11 +373,20 @@ export interface CaseAnalysisResult {
   provider: string;
   model: string;
   is_mock: boolean;
+  workflow_version: string;
+  prompt_version: string;
+  result_schema_version: string;
   insufficient_sources: boolean;
   summary: string;
-  parties: string[];
+  parties: AnalysisParty[];
+  entities: AnalysisEntity[];
+  amounts: AnalysisAmount[];
   facts: AnalysisClaim[];
+  procedural_history: AnalysisProceduralEvent[];
   legal_issues: AnalysisClaim[];
+  issue_analysis: AnalysisLegalIssue[];
+  evidence_questions: AnalysisEvidenceQuestion[];
+  ambiguities: AnalysisUncertainty[];
   timeline: AnalysisTimelineEvent[];
   inferences: AnalysisClaim[];
   unverified_hypotheses: string[];
@@ -255,6 +394,9 @@ export interface CaseAnalysisResult {
   limitations: string[];
   verification: AnalysisVerificationSummary;
   source_manifest: AnalysisSourceManifestEntry[];
+  source_stats: AnalysisSourceStats;
+  professional_review_required: boolean;
+  input_metadata: Record<string, unknown>;
 }
 
 export interface WorkflowRun {
@@ -267,6 +409,9 @@ export interface WorkflowRun {
   provider: string | null;
   model: string | null;
   is_mock: boolean;
+  workflow_version: string | null;
+  prompt_version: string | null;
+  result_schema_version: string | null;
   document_ids: string[];
   focus: string | null;
   result: CaseAnalysisResult | null;

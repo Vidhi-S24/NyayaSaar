@@ -1,17 +1,29 @@
-"""Case Intelligence LangGraph.
+"""Case Intelligence LangGraph (Stage 6).
 
-    START → orchestrator ──(no sources)──────────────→ finalize → END
+    START → orchestrator ──(insufficient sources)──────────────→ finalize → END
                  │
-                 └──→ case_analyst ──(provider error)──→ finalize → END
+                 └──→ case_analyst ──(provider error)─────────→ finalize → END
                             │
-                            └──→ verifier ──(unsupported, budget left)──→ case_analyst
+                            └──→ evidence_analyst ──(provider error)──→ finalize → END
                                        │
-                                       └──(verified / retry exhausted)──→ finalize → END
+                                       └──→ chronology_builder
+                                                  │
+                                                  └──→ verifier
+                                                         │
+                                          (unsupported, budget left)
+                                                         │
+                                     ┌───────────────────┴───────────────┐
+                                     ▼                                   ▼
+                              case_analyst                       evidence_analyst
+                                     │                                   │
+                                     └──────────→ evidence_analyst ←─────┘
+                                                        │
+                                                        └──→ finalize → END
 
 The graph is compiled per run with an in-process ``MemorySaver`` checkpoint
 store. Durable workflow status/results are persisted by the service layer; the
 in-process checkpoints support inspection and bounded resumability within a
-process. True cross-restart resume is a later-stage concern (see D-0xx).
+process. True cross-restart resume is a later-stage concern (see D-029).
 """
 
 from __future__ import annotations
@@ -54,6 +66,8 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agents.context import WorkflowContext
 from app.agents.nodes.case_analyst import make_case_analyst_node
+from app.agents.nodes.chronology_builder import make_chronology_builder_node
+from app.agents.nodes.evidence_analyst import make_evidence_analyst_node
 from app.agents.nodes.finalize import make_finalize_node
 from app.agents.nodes.orchestrator import make_orchestrator_node
 from app.agents.nodes.verifier import make_verifier_node
@@ -71,14 +85,23 @@ def route_after_orchestrator(state: CaseAnalysisState) -> str:
 def route_after_case_analyst(state: CaseAnalysisState) -> str:
     if state.get("status") == "failed":
         return "finalize"
-    return "verifier"
+    return "evidence_analyst"
+
+
+def route_after_evidence_analyst(state: CaseAnalysisState) -> str:
+    if state.get("status") == "failed":
+        return "finalize"
+    return "chronology_builder"
 
 
 def route_after_verifier(state: CaseAnalysisState) -> str:
     if state.get("status") == "failed":
         return "finalize"
     if state.get("needs_revision"):
-        return "case_analyst"
+        target = state.get("revision_target")
+        if target == "case_analyst":
+            return "case_analyst"
+        return "evidence_analyst"
     return "finalize"
 
 
@@ -87,6 +110,8 @@ def build_case_analysis_graph(ctx: WorkflowContext):
 
     graph.add_node("orchestrator", make_orchestrator_node(ctx))
     graph.add_node("case_analyst", make_case_analyst_node(ctx))
+    graph.add_node("evidence_analyst", make_evidence_analyst_node(ctx))
+    graph.add_node("chronology_builder", make_chronology_builder_node(ctx))
     graph.add_node("verifier", make_verifier_node(ctx))
     graph.add_node("finalize", make_finalize_node(ctx))
 
@@ -99,12 +124,22 @@ def build_case_analysis_graph(ctx: WorkflowContext):
     graph.add_conditional_edges(
         "case_analyst",
         route_after_case_analyst,
-        {"verifier": "verifier", "finalize": "finalize"},
+        {"evidence_analyst": "evidence_analyst", "finalize": "finalize"},
     )
+    graph.add_conditional_edges(
+        "evidence_analyst",
+        route_after_evidence_analyst,
+        {"chronology_builder": "chronology_builder", "finalize": "finalize"},
+    )
+    graph.add_edge("chronology_builder", "verifier")
     graph.add_conditional_edges(
         "verifier",
         route_after_verifier,
-        {"case_analyst": "case_analyst", "finalize": "finalize"},
+        {
+            "case_analyst": "case_analyst",
+            "evidence_analyst": "evidence_analyst",
+            "finalize": "finalize",
+        },
     )
     graph.add_edge("finalize", END)
 
@@ -118,6 +153,6 @@ async def run_case_analysis_graph(
     graph = build_case_analysis_graph(ctx)
     config = {
         "configurable": {"thread_id": initial_state.get("workflow_id", "workflow")},
-        "recursion_limit": 20,
+        "recursion_limit": 24,
     }
     return await graph.ainvoke(initial_state, config=config)  # type: ignore[return-value]

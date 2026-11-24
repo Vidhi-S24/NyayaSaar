@@ -1,10 +1,104 @@
 # NyayaSaar — Implementation Status
 
-> Updated: Stage 5 complete
+> Updated: Stage 6 Case Intelligence module complete
 
 ---
 
 ## Completed stages
+
+### Stage 6 — Case Intelligence module ✅
+
+**Completed:** 2026-11-24
+*(See `stage-handoffs/stage-6.md` for full details, commands, and limitations)*
+
+**Scope:** Stage 6 **Case Intelligence only**. Hybrid retrieval, contradiction/gap detection, precedent graphs, Advocate Mode, and Judge/Clerk Mode were **not** implemented and remain future work.
+
+#### What was built
+
+| Path | Description |
+|---|---|
+| `apps/api/app/agents/schemas.py` | Stage 6 draft contracts (extraction + evidence), verified contracts including source-linked `DraftParty`/`VerifiedParty`, `VerificationSummary`, `SourceStats`, `SourceManifestEntry`, and workflow/prompt/schema version constants (`6.1.0`, `2026-11-case-intelligence-v2`, `6.1`) |
+| `apps/api/app/agents/state.py` | Extended typed LangGraph state: dual drafts, chronology, revision target, verification feedback, call/token budgets |
+| `apps/api/app/agents/graph.py` | Topology: orchestrator → case_analyst → evidence_analyst → chronology_builder → verifier → finalize, with conditional routing and bounded revision back to the responsible specialist |
+| `apps/api/app/agents/nodes/case_analyst.py` | Fact/party/entity/date/procedural/amount extraction node |
+| `apps/api/app/agents/nodes/evidence_analyst.py` | Legal issues, evidence questions, uncertainties, and inferences node |
+| `apps/api/app/agents/nodes/chronology_builder.py` | Deterministic chronology assembly and ordering (no model call) |
+| `apps/api/app/agents/nodes/verifier.py` | Deterministic quote/span verification, support classification, retry feedback, version stamping |
+| `apps/api/app/agents/nodes/orchestrator.py`, `finalize.py` | Source planning, budgets, insufficient-source handling, final result assembly |
+| `apps/api/app/agents/tools/sources.py` | Round-robin page selection across documents, duplicate suppression, source stats, quote span offsets |
+| `apps/api/app/agents/tools/dates.py` | Deterministic date normalisation, precision, and ambiguity flags |
+| `apps/api/app/agents/tools/injection.py` | Instruction-like source detection and untrusted-text sanitisation helpers |
+| `apps/api/app/ai/prompts/case_analysis.py` | Case Analyst + Evidence Analyst prompts, compact source index, prompt-injection wrappers |
+| `apps/api/app/services/report.py` | Persisted-result HTML (print/PDF-ready) and Markdown report rendering; escaped output |
+| `apps/api/app/services/analysis.py` | Stage 6 dispatch, `get_run_and_case`, version persistence, honest `unsupported_workflow` error for unwired types |
+| `apps/api/app/routers/analysis.py` | Added authenticated `GET .../report?format=html\|markdown` |
+| `apps/api/alembic/versions/004_add_case_intelligence_metadata.py` | Migration `004`: `workflow_version`, `prompt_version`, `result_schema_version` |
+| `apps/api/app/db/models/workflow.py` | Persisted version metadata columns |
+| `apps/api/app/config.py` | `agent_min_source_chars=40`, `agent_max_llm_calls=5`, existing bounded budgets retained |
+| `apps/api/tests/test_case_intelligence.py` | Verifier extensions, report rendering, and export API tests |
+| `apps/api/tests/test_dates.py` | Deterministic date normalisation tests |
+| `apps/api/tests/test_source_planner.py` | De-duplication, round-robin fairness, short/partial/failed document stats, injection flagging |
+| `apps/api/tests/test_analysis_graph.py` | Updated for two specialist calls, revision routing, and budget/insufficient-source paths |
+| `packages/shared/src/index.ts` | Stage 6 result types and workflow version metadata |
+| `apps/web/src/lib/api/analysis.ts`, `api-client.ts` | Typed report download + blob saving helpers |
+| `apps/web/src/components/analysis/analysis-panel.tsx` | Full Case Intelligence workspace: document selection, focus, live progress, verification panel, entities/amounts/facts/procedural history/chronology/issues/evidence questions/ambiguities/inferences, source dialog with span highlighting, export/print, rerun |
+| `apps/web/src/app/(app)/intelligence/intelligence-client.tsx` | Stage 6 messaging and entry point |
+
+#### Acceptance criteria status
+
+| Criterion | Status |
+|---|---|
+| Analyse selected documents in an authorised case | ✅ Document selector + focus; ownership enforced server-side |
+| Extract facts, entities, dates, procedural history, parties, amounts | ✅ Case Analyst draft + deterministic chronology; parties are verified records with source refs (D-043) |
+| Legal issues and evidence questions | ✅ Evidence Analyst draft, verified separately from source facts |
+| Structured chronology with ambiguity flags | ✅ Deterministic builder; ambiguous dates preserved with notes, never silently guessed |
+| Preserve document IDs, page numbers, text spans | ✅ Verified source refs with page + span offsets; UI highlights only when verified |
+| Separate source facts, inferences, review questions | ✅ Distinct collections and visually distinct UI sections |
+| Verification checks statements against source text | ✅ Deterministic verifier; support categories and revision loop |
+| Typed LangGraph state, conditional routing, bounded retries/timeouts/token budgets | ✅ Dual-specialist graph, `AGENT_MAX_LLM_CALLS=5`, `AGENT_MAX_TOTAL_TOKENS`, `AGENT_MAX_VERIFIER_RETRIES=1`, execution timeout |
+| Avoid duplicate document text; enforce input/execution limits | ✅ Round-robin selection + duplicate-page suppression; bounded input chars |
+| Store model/workflow/prompt versions | ✅ Persisted columns + result fields |
+| Empty, short, corrupted, partially extracted documents | ✅ Explicit notes/stats; short-but-usable pages analysed; insufficient result instead of invention |
+| Citations open source document/page; no invented pages or false verification | ✅ Source dialog uses real document/page; unverified quotes labelled, never implied verified |
+| Export and rerun | ✅ HTML print view, HTML download, Markdown download, rerun; all from persisted result |
+| Deterministic fixtures and mocked model calls in tests | ✅ Scripted provider + in-memory DB; no live calls |
+| No fabricated authorities/citations/holdings/precedential status | ✅ Prompt + verifier forbid external authority claims; report introduces no new facts |
+| Docs/handoff updated | ✅ This file, decisions, architecture, deployment, `stage-handoffs/stage-6.md`, `.env.example` |
+
+#### Verification results (actual)
+
+```
+apps/api:  .venv\Scripts\python.exe -m pytest tests -q --ignore=tests/test_gemini_connection.py
+           → 163 passed, 0 failed
+           alembic upgrade head (temp SQLite)
+           → 001 → 002 → 003 → 004; version=004;
+             workflow_runs has workflow_version, prompt_version, result_schema_version
+apps/web:  pnpm --filter web type-check          → exit 0
+           pnpm --filter web lint                → no warnings or errors
+           pnpm --filter web test                → 27 passed (4 files)
+           pnpm --filter web build               → exit 0; 15 routes compiled
+shared:    pnpm --filter @nyayasaar/shared type-check → exit 0
+mock HTTP: register → upload → start analysis → completed (status 6.1.0),
+           HTML report 200 (10,923 bytes), Markdown report 200 (5,004 bytes),
+           cross-user run/report → 404
+live:      Gemini probe reached the configured endpoint, but the full analyst
+           request returned 503 UNAVAILABLE; status failed / provider_unavailable,
+           llm_calls=0, no result. Later the local AI_API_KEY was no longer present.
+```
+
+`apps/api/tests/test_gemini_connection.py` is an untracked, opt-in live-provider test that fails collection without a Gemini key; it is excluded from the deterministic suite.
+
+#### Known Stage 6 limitations
+
+1. **Live-provider verification did not complete** — a configured Gemini key was present at the start of verification. A tiny probe succeeded for `gemini-3.5-flash-lite`, but the full Case Analyst request returned `503 UNAVAILABLE` ("model is currently experiencing high demand") across several model IDs; the run ended `provider_unavailable` with `llm_calls=0` and no result. Later the local `AI_API_KEY` was no longer present in `apps/api/.env`. Mock/scripted runs are fully verified; a real-key smoke test remains a deployment step (D-044).
+2. **PostgreSQL migration `004` not run against real PostgreSQL** — verified with a temporary SQLite `upgrade head` only.
+3. **Report export is HTML/Markdown, not server-generated PDF** — the HTML report is self-contained and print-ready ("Print / Save as PDF" in the browser). No PDF dependency was added.
+4. **In-process runner remains** — no durable queue; a crash loses in-flight work and the run is marked failed/retryable on startup (D-029).
+5. **Stage 6 is document-grounded only** — no external legal-authority retrieval, no precedent/contradiction/advocate/judge modules. Untracked future-stage scaffolding exists but is **not** imported or wired.
+6. **Source span offsets are excerpt-relative** — the UI highlights only when the verifier marked the quote verified and offsets are valid.
+7. **Untracked future-stage files remain in the working tree** — they are user-owned/unwired and were deliberately left untouched.
+
+---
 
 ### Stage 5 — Provider-agnostic AI and LangGraph case analysis ✅
 
@@ -74,7 +168,7 @@ apps/web:  pnpm --filter @nyayasaar/web type-check → exit 0
 
 1. **No live AI call was executed** in this environment (no Gemini/OpenAI/Anthropic key). Provider adapters are verified with an injected fake Gemini client and `httpx.MockTransport`; a real-key smoke test is a deployment step.
 2. **In-process runner, not a durable queue** — a process crash loses in-flight work; startup recovery marks the row failed and retryable. LangGraph `MemorySaver` is in-process, so cross-restart graph resume is deferred (D-029).
-3. **No external legal authority retrieval** — Stage 5 deliberately extracts only from uploaded documents and forbids statute/case citations. Contradictions, precedent, advocate, and judge modules remain Stage 6.
+3. **No external legal authority retrieval** — Stage 5 deliberately extracts only from uploaded documents and forbids statute/case citations. (Stage 6 Case Intelligence keeps this constraint; contradictions, precedent, advocate, and judge modules remain pending.)
 4. **Source budget is bounded** — very large document sets are truncated (`AGENT_MAX_INPUT_CHARS`, default 24k); the result records truncation/omission notes.
 5. **Prompt injection is mitigated, not eliminated** — wrappers, escaping, verifier constraints, and authority-citation flags reduce risk; human review remains required.
 6. **PostgreSQL migration not run here** — verified on SQLite only (local policy blocks some compiled drivers). First deploy must run `alembic upgrade head` against PostgreSQL.
@@ -212,15 +306,17 @@ Full landing page, dashboard, case workspace, document library, module shells, d
 
 ## Pending stages
 
-### Stage 6 — Legal Analysis Modules ⏳
+### Stage 6 remainder — Legal Analysis Modules ⏳
 
-**Prerequisites:** Stage 5 complete (✅), PostgreSQL + pgvector for retrieval
+**Prerequisites:** Stage 6 Case Intelligence complete (✅), PostgreSQL + pgvector for retrieval
 
 **Scope:**
-- Full Case Intelligence enrichment: hybrid retrieval (full-text + embeddings), contradiction/gap detection
+- Hybrid retrieval (full-text + embeddings), contradiction/gap detection
 - Precedent Explorer with a configured legal-authority corpus and provenance checks
 - Advocate and Judge/Clerk modules
 - Durable background queue if analysis volume requires it
+
+> The Stage 6 **Case Intelligence** module is complete. The retrieval, contradiction, precedent, advocate, and judge modules listed above remain pending.
 
 ### Stage 7 — Evaluation, Monitoring, and Deployment ⏳
 
@@ -228,14 +324,15 @@ Full landing page, dashboard, case workspace, document library, module shells, d
 
 ## Known limitations (current)
 
-1. **No live AI provider call was executed locally** — adapters are tested with mocks; configure a key and run a real smoke test on deployment.
-2. **PostgreSQL migrations not yet run against a real PostgreSQL instance** in this environment (no local Postgres/Docker; some compiled driver DLLs are blocked). Migration logic verified via SQLite round-trip (001→003). First production deploy must run `alembic upgrade head` and verify.
+1. **Live AI provider verification is incomplete** — a Gemini key was available at the start of verification, but the provider returned `503 UNAVAILABLE` for the full analysis request (`provider_unavailable`, `llm_calls=0`); the key was later absent from the local `.env`. The Stage 6 graph, verifier, API, and reports are fully verified with mocks/scripted providers. Configure a key and repeat the live smoke test on deployment (D-044).
+2. **PostgreSQL migrations not yet run against a real PostgreSQL instance** in this environment (no local Postgres/Docker; some compiled driver DLLs are blocked). Migration logic verified via SQLite round-trip (001→004). First production deploy must run `alembic upgrade head` and verify.
 3. **Dev SQLite fallback is functional, not production-grade** — accounts persist in `apps/api/nyayasaar-dev.db`; startup creates missing tables (D-019). PostgreSQL is required for production and pgvector.
 4. **JWT in localStorage** — vulnerable to XSS; mitigated by short expiry and server-side authorization. CSP and/or httpOnly cookie sessions are future hardening (Stage 7).
 5. **Case sharing not yet active** — `case_memberships` exists but authorization is owner-only (D-016).
 6. **Analysis runner is in-process** — not a durable queue; interrupted runs are marked failed on startup and can be retried (D-029).
-7. **No external authority retrieval in Stage 5** — precedent/contradiction/advocate/judge modules and hybrid retrieval are Stage 6.
-8. **Demo data surfaces remain** — history and several module shells still use clearly-labelled fixtures until Stage 6.
-9. **Dashboard advanced stats** (reports/contradictions) remain placeholders until Stage 6.
-10. **No rate limiting yet** (Stage 7).
-11. **No email verification flow** — `users.is_verified` exists but is unused; verification mail is out of scope.
+7. **Case Intelligence is document-grounded only** — no external authority retrieval, precedent graphs, contradiction detection, or advocate/judge modes. Hybrid retrieval and those modules remain pending.
+8. **Report export is HTML/Markdown only** — no server-generated PDF; the HTML report is print-ready.
+9. **Demo data surfaces remain** — history and several module shells still use clearly-labelled fixtures.
+10. **Dashboard advanced stats** (reports/contradictions) remain placeholders.
+11. **No rate limiting yet** (Stage 7).
+12. **No email verification flow** — `users.is_verified` exists but is unused; verification mail is out of scope.

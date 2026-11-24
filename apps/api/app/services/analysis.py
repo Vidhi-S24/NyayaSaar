@@ -1,6 +1,6 @@
 """Analysis workflow service and in-process runner.
 
-Stage 5 deliberately avoids Redis/Celery. Workflows are bounded (120 s by
+Stage 6 deliberately avoids Redis/Celery. Workflows are bounded (120 s by
 default) and run as FastAPI background tasks in the same Render web process.
 Status and results are persisted so the UI can poll and so failures survive a
 restart. A durable queue is a later-stage concern (see D-024/D-025).
@@ -21,6 +21,11 @@ from sqlalchemy.orm import sessionmaker
 
 from app.agents.context import WorkflowContext
 from app.agents.graph import run_case_analysis_graph
+from app.agents.schemas import (
+    CASE_INTELLIGENCE_PROMPT_VERSION,
+    CASE_INTELLIGENCE_RESULT_SCHEMA_VERSION,
+    CASE_INTELLIGENCE_WORKFLOW_VERSION,
+)
 from app.agents.state import CaseAnalysisState
 from app.agents.tools.sources import load_case_sources
 from app.ai.base import LLMProvider, ProviderError, ProviderNotConfiguredError
@@ -71,6 +76,7 @@ async def create_workflow_run(
     case_id: str,
     user_id: str,
     data: CaseAnalysisRequest,
+    workflow_type: str = "case_analysis",
 ) -> WorkflowRun:
     case = await _get_owned_case(db, case_id, user_id)
     if case is None:
@@ -107,7 +113,7 @@ async def create_workflow_run(
         .where(
             WorkflowRun.case_id == case_id,
             WorkflowRun.user_id == user_id,
-            WorkflowRun.workflow_type == "case_analysis",
+            WorkflowRun.workflow_type == workflow_type,
             WorkflowRun.status.in_(("queued", "running")),
         )
         .order_by(WorkflowRun.created_at.desc())
@@ -121,7 +127,7 @@ async def create_workflow_run(
         id=str(uuid.uuid4()),
         case_id=case_id,
         user_id=user_id,
-        workflow_type="case_analysis",
+        workflow_type=workflow_type,
         status="queued",
         progress=0,
         input_payload={"document_ids": document_ids, "focus": data.focus},
@@ -152,11 +158,35 @@ async def get_workflow_run(
     return result.scalar_one_or_none()
 
 
+async def get_run_and_case(
+    db: AsyncSession,
+    *,
+    workflow_id: str,
+    user_id: str,
+    case_id: str,
+) -> tuple[Case, WorkflowRun] | None:
+    """Load an owned case and one of its analysis runs, or ``None``.
+
+    Used by the report export so a download cannot bypass the same ownership
+    checks as the JSON endpoints.
+    """
+    case = await _get_owned_case(db, case_id, user_id)
+    if case is None:
+        return None
+    run = await get_workflow_run(
+        db, workflow_id=workflow_id, user_id=user_id, case_id=case_id
+    )
+    if run is None:
+        return None
+    return case, run
+
+
 async def list_workflow_runs(
     db: AsyncSession,
     *,
     case_id: str,
     user_id: str,
+    workflow_type: str = "case_analysis",
     limit: int = 20,
 ) -> tuple[list[WorkflowRun], int]:
     case = await _get_owned_case(db, case_id, user_id)
@@ -166,7 +196,7 @@ async def list_workflow_runs(
     base = select(WorkflowRun).where(
         WorkflowRun.case_id == case_id,
         WorkflowRun.user_id == user_id,
-        WorkflowRun.workflow_type == "case_analysis",
+        WorkflowRun.workflow_type == workflow_type,
     )
     count_result = await db.execute(
         select(func.count()).select_from(base.subquery())
@@ -264,6 +294,18 @@ class WorkflowRunner:
         run.started_at = now
         run.progress = 5
         run.current_step = "starting"
+        wtype = run.workflow_type or "case_analysis"
+        if wtype != "case_analysis":
+            await self._fail(
+                db,
+                run,
+                "unsupported_workflow",
+                "This workflow type is not available in this release.",
+            )
+            return
+        run.workflow_version = CASE_INTELLIGENCE_WORKFLOW_VERSION
+        run.prompt_version = CASE_INTELLIGENCE_PROMPT_VERSION
+        run.result_schema_version = CASE_INTELLIGENCE_RESULT_SCHEMA_VERSION
         run.attempt_count = (run.attempt_count or 0) + 1
         run.error_code = None
         run.error_message = None
@@ -308,13 +350,16 @@ class WorkflowRunner:
 
         payload = run.input_payload or {}
         document_ids = payload.get("document_ids") or None
-        sources, source_notes = await load_case_sources(
+        source_result = await load_case_sources(
             db,
             case_id=run.case_id,
             user_id=run.user_id,
             document_ids=document_ids,
             max_chars=settings.agent_max_input_chars,
         )
+        sources = source_result.sources
+        source_notes = source_result.notes
+        source_stats = source_result.stats
 
         case_context = {
             "title": case.title,
@@ -333,10 +378,14 @@ class WorkflowRunner:
             "case_context": case_context,
             "sources": [s.as_dict() for s in sources],
             "source_notes": source_notes,
+            "source_stats": source_stats,
             "provider_name": provider.name,
             "model_name": provider.model,
             "is_mock": provider.is_mock,
             "draft": None,
+            "extraction_draft": None,
+            "evidence_draft": None,
+            "chronology": [],
             "result": None,
             "status": "running",
             "current_step": "orchestrator",
@@ -346,6 +395,7 @@ class WorkflowRunner:
             "notes": [],
             "retry_count": 0,
             "needs_revision": False,
+            "revision_target": None,
             "verification_feedback": [],
             "llm_calls": 0,
             "token_usage": {"input": 0, "output": 0, "total": 0},

@@ -5,12 +5,20 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.agents.context import WorkflowContext
-from app.agents.schemas import CaseAnalysisResult, VerificationSummary
+from app.agents.schemas import (
+    CASE_INTELLIGENCE_PROMPT_VERSION,
+    CASE_INTELLIGENCE_RESULT_SCHEMA_VERSION,
+    CASE_INTELLIGENCE_WORKFLOW_VERSION,
+    CaseAnalysisResult,
+    SourceStats,
+    VerificationSummary,
+)
 from app.agents.state import CaseAnalysisState
 
 
 def _insufficient_result(state: CaseAnalysisState) -> CaseAnalysisResult:
     notes = list(state.get("notes") or [])
+    stats = SourceStats(**(state.get("source_stats") or {}))
     return CaseAnalysisResult(
         workflow_id=str(state.get("workflow_id", "")),
         case_id=str(state.get("case_id", "")),
@@ -18,14 +26,23 @@ def _insufficient_result(state: CaseAnalysisState) -> CaseAnalysisResult:
         provider=str(state.get("provider_name", "none")),
         model=str(state.get("model_name", "none")),
         is_mock=bool(state.get("is_mock", False)),
+        workflow_version=CASE_INTELLIGENCE_WORKFLOW_VERSION,
+        prompt_version=CASE_INTELLIGENCE_PROMPT_VERSION,
+        result_schema_version=CASE_INTELLIGENCE_RESULT_SCHEMA_VERSION,
         insufficient_sources=True,
         summary=(
             "No usable extracted text was available for this case, so no case "
-            "analysis could be produced."
+            "analysis could be produced. No facts or legal issues were inferred."
         ),
         parties=[],
+        entities=[],
+        amounts=[],
         facts=[],
+        procedural_history=[],
         legal_issues=[],
+        issue_analysis=[],
+        evidence_questions=[],
+        ambiguities=[],
         timeline=[],
         inferences=[],
         unverified_hypotheses=[],
@@ -41,6 +58,15 @@ def _insufficient_result(state: CaseAnalysisState) -> CaseAnalysisResult:
         ],
         verification=VerificationSummary(notes=notes),
         source_manifest=[],
+        source_stats=stats,
+        professional_review_required=True,
+        input_metadata={
+            "source_count": len(state.get("sources") or []),
+            "documents_analyzed": int(stats.documents_analyzed),
+            "focus_supplied": bool(
+                (state.get("case_context") or {}).get("focus")
+            ),
+        },
     )
 
 

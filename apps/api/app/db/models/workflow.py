@@ -69,6 +69,13 @@ class WorkflowRun(TimestampMixin, Base):
         sa.Boolean, nullable=False, default=False, server_default=sa.text("false")
     )
 
+    # Workflow/version metadata (Stage 6)
+    workflow_version: Mapped[str | None] = mapped_column(sa.String(40), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(sa.String(80), nullable=True)
+    result_schema_version: Mapped[str | None] = mapped_column(
+        sa.String(40), nullable=True
+    )
+
     # Input and output
     input_payload: Mapped[dict[str, Any]] = mapped_column(
         sa.JSON, nullable=False, default=dict, server_default="{}"

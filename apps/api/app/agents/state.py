@@ -20,6 +20,7 @@ class CaseAnalysisState(TypedDict, total=False):
     case_context: dict[str, Any]
     sources: list[dict[str, Any]]
     source_notes: list[str]
+    source_stats: dict[str, int]
 
     # Provider metadata (safe to persist; never includes the key)
     provider_name: str
@@ -28,6 +29,9 @@ class CaseAnalysisState(TypedDict, total=False):
 
     # Outputs
     draft: dict[str, Any] | None
+    extraction_draft: dict[str, Any] | None
+    evidence_draft: dict[str, Any] | None
+    chronology: list[dict[str, Any]]
     result: dict[str, Any] | None
 
     # Orchestration
@@ -41,6 +45,7 @@ class CaseAnalysisState(TypedDict, total=False):
     # Bounded execution / verification
     retry_count: int
     needs_revision: bool
+    revision_target: str | None  # case_analyst | evidence_analyst
     verification_feedback: list[str]
     llm_calls: int
     token_usage: dict[str, int]

@@ -1,11 +1,11 @@
 /**
- * Analysis API — typed wrappers around Stage 5 case-analysis workflows.
+ * Analysis API — typed wrappers around Stage 6 Case Intelligence workflows.
  *
  * Long-running work is queued server-side; clients poll the run endpoint.
  * Provider keys never reach the browser. Results are AI-assisted and must be
  * independently verified by a legal professional.
  */
-import { apiClient } from "@/lib/api-client";
+import { apiClient, downloadRequest } from "@/lib/api-client";
 import type {
   AIStatus,
   CaseAnalysisRequest,
@@ -47,6 +47,33 @@ export function retryCaseAnalysis(caseId: string, workflowId: string) {
 
 export function getAIStatus() {
   return apiClient.get<AIStatus>("/api/v1/ai/status");
+}
+
+export type ReportFormat = "html" | "markdown";
+
+/** Download a completed report (self-contained HTML or Markdown). */
+export function downloadCaseReport(
+  caseId: string,
+  workflowId: string,
+  format: ReportFormat = "html",
+) {
+  return downloadRequest(
+    `/api/v1/cases/${caseId}/analysis/${workflowId}/report`,
+    { format },
+  );
+}
+
+/** Trigger a browser download for an already-fetched report blob. */
+export function saveBlob(blob: Blob, filename: string): void {
+  if (typeof window === "undefined") return;
+  const url = window.URL.createObjectURL(blob);
+  const anchor = window.document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  window.document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 // ---------------------------------------------------------------------------

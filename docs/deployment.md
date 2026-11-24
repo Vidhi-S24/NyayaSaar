@@ -1,6 +1,6 @@
 # NyayaSaar — Deployment Guide
 
-> Last updated: Stage 5 — Provider-agnostic AI and LangGraph case analysis
+> Last updated: Stage 6 — Case Intelligence module
 
 ---
 
@@ -137,14 +137,15 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 | `GEMINI_API_KEY` | Legacy | Used only when `AI_PROVIDER=gemini` and `AI_API_KEY` is empty |
 | `GEMINI_MODEL_ID` | Legacy | Used only when `AI_PROVIDER=gemini` and `AI_MODEL` is empty |
 | `AGENT_EXECUTION_TIMEOUT_S` | No | Whole-workflow timeout (default 120) |
-| `AGENT_MAX_LLM_CALLS` | No | Model-call budget per run (default 3) |
+| `AGENT_MAX_LLM_CALLS` | No | Model-call budget per run (default 5: two specialists + one bounded revision) |
 | `AGENT_MAX_INPUT_CHARS` | No | Source excerpt budget (default 24000) |
+| `AGENT_MIN_SOURCE_CHARS` | No | Pages below this length are analysed but flagged short (default 40) |
 | `AGENT_MAX_TOTAL_TOKENS` | No | Token budget per run (default 80000) |
-| `AGENT_MAX_VERIFIER_RETRIES` | No | Analyst revisions after verification (default 1) |
+| `AGENT_MAX_VERIFIER_RETRIES` | No | Specialist revisions after verification (default 1) |
 | `AGENT_MAX_WORKFLOW_ATTEMPTS` | No | Manual retry limit per run (default 2) |
 | `DATABASE_URL` | Yes (Stage 3) | Async asyncpg URL (Render internal database URL + `+asyncpg`) |
 | `DATABASE_SYNC_URL` | Yes (Stage 3) | Sync psycopg-3 URL for Alembic |
-| `REDIS_URL` | Not used in Stage 5 | Reserved for a durable queue (D-029) |
+| `REDIS_URL` | Not used yet | Reserved for a durable queue (D-029) |
 | `NEO4J_URI` | Optional | Neo4j for citation graphs |
 | `NEO4J_USER` | Optional | Neo4j username |
 | `NEO4J_PASSWORD` | Optional | Neo4j password |
@@ -187,10 +188,27 @@ AI_API_KEY=...
 After deploy:
 
 1. `GET /api/v1/ai/status` (authenticated) must report `is_mock: false`, the expected provider/model, and `configured: true`.
-2. Upload a small TXT/PDF with known text, open the case **Analysis** tab, run it, and confirm every fact cites the real document/page and the result says `is_mock: false`.
-3. If `is_mock: true` appears, the key is missing or invalid for the selected provider. Do **not** treat fixture output as analysis. In production, fixture mode is disabled unless `AI_ALLOW_MOCK=true` is set deliberately.
-4. If a run fails with `provider_model_unavailable`, the model ID has been retired for your account; set `AI_MODEL` to a model your key can use.
-5. Check server logs for `AI provider configured provider=... model=...` (never the key or document text).
+2. Upload a small TXT/PDF with known text, open the case **Intelligence / Analysis** workspace, select documents, and run it.
+3. Confirm:
+   - every fact/issue cites a real document and page;
+   - the verification panel shows supported / partial / unsupported counts;
+   - the report shows `workflow_version`, `prompt_version`, and `result_schema_version`;
+   - the result says `is_mock: false`.
+4. Export the report: "Print / save PDF" should open a self-contained print view; "HTML report" and "Markdown" should download real files.
+5. If `is_mock: true` appears, the key is missing or invalid for the selected provider. Do **not** treat fixture output as analysis. In production, fixture mode is disabled unless `AI_ALLOW_MOCK=true` is set deliberately.
+6. If a run fails with `provider_model_unavailable`, the model ID has been retired for your account; set `AI_MODEL` to a model your key can use.
+7. Check server logs for `AI provider configured provider=... model=...` (never the key or document text).
+
+**Observed during Stage 6 verification (2026-11-24).** `gemini-2.5-flash`
+returned `404 NOT_FOUND` ("no longer available to new users"). The configured
+`gemini-3.1-flash-lite`, plus `gemini-3.5-flash`, `gemini-3.6-flash`,
+`gemini-3.7-flash`, `gemini-3.8-flash`, and `gemini-flash-lite-latest`, returned
+`503 UNAVAILABLE` ("model is currently experiencing high demand") for the full
+Case Analyst request. Small probes sometimes succeeded, so this was upstream
+load-shedding, not a schema error. The API maps it to
+`provider_unavailable`, marks the run failed, and does not produce a result.
+Retry later, or select a model your key can use
+(`client.models.list()`); do not weaken the output schema in response to a 503.
 
 ### Cost notes (Render)
 
@@ -240,9 +258,10 @@ pip install -r requirements.txt && alembic upgrade head
 - Migration `001` creates `users`, `cases`, and `case_memberships`.
 - Migration `002` (Stage 4) creates `documents` and `document_chunks`; enables the `pgvector` extension.
 - Migration `003` (Stage 5) creates `workflow_runs` and its indexes.
+- Migration `004` (Stage 6) adds `workflow_version`, `prompt_version`, and `result_schema_version` to `workflow_runs`.
 - Run `alembic upgrade head` to apply all pending migrations atomically.
 - Run `alembic downgrade base` only when you accept full data loss.
-- ⚠️ PostgreSQL behaviour was logic-verified against SQLite in this environment (D-015/D-032). Run `alembic upgrade head` against the production database once at first deploy and confirm all six tables exist, including `workflow_runs`.
+- ⚠️ PostgreSQL behaviour was logic-verified against SQLite in this environment (D-015/D-032). Run `alembic upgrade head` against the production database once at first deploy and confirm all tables exist (including `workflow_runs` with the three version columns).
 
 ---
 
@@ -255,11 +274,11 @@ pip install -r requirements.txt && alembic upgrade head
 - Set `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` in environment.
 - The core product functions without Neo4j; citation graph features are gated.
 
-### Redis (background jobs — not used in Stage 5)
+### Redis (background jobs — not used yet)
 
 - Render Redis: available from ~\$10/month.
 - Local: `docker run -p 6379:6379 redis:latest`
-- Stage 5 runs analysis as a bounded in-process FastAPI background task (D-029). Redis/Celery becomes necessary when analysis volume, OCR, or crash-safe long jobs require a durable queue.
+- Stage 6 still runs analysis as a bounded in-process FastAPI background task (D-029). Redis/Celery becomes necessary when analysis volume, OCR, or crash-safe long jobs require a durable queue.
 
 ### LangSmith (LLM tracing)
 
@@ -277,6 +296,7 @@ pip install -r requirements.txt && alembic upgrade head
 - [ ] `AI_API_KEY` (or legacy `GEMINI_API_KEY`) is set only as a Render environment variable (never committed)
 - [ ] `GET /api/v1/ai/status` reports `is_mock: false` and the intended provider/model
 - [ ] A real analysis run cites real document IDs/pages and is not labelled as a fixture
+- [ ] A real run exports an HTML report and a Markdown report from the persisted result
 - [ ] `AI_ALLOW_MOCK` is not enabled in production
 - [ ] `DATABASE_URL` uses a dedicated database user with least privilege
 - [ ] All file uploads validated (type, size, sanitised filename)
