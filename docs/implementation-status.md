@@ -1,10 +1,30 @@
 # NyayaSaar — Implementation Status
 
-> Updated: Stage 7 Hybrid Legal Retrieval complete
+> Updated: Stage 8 Contradiction & Gap Hunter complete
 
 ---
 
 ## Completed stages
+
+### Stage 8 — Contradiction & Gap Hunter ✅
+
+**Completed:** 2026-11-25
+*(See `stage-handoffs/stage-8.md` for full details, commands, and limitations)*
+
+**Scope:** Stage 8 **Contradiction & Gap Hunter only**. Precedent Explorer (Stage 9), Advocate Mode, and Judge/Clerk Mode remain future work.
+
+#### What was built
+
+| Path | Description |
+|---|---|
+| `apps/api/alembic/versions/006_add_finding_reviews.py`, `apps/api/app/db/models/finding_review.py` | Migration `006` and `FindingReview` model with append-only `history` audit trail |
+| `apps/api/app/agents/schemas_contradiction.py`, `apps/api/app/ai/prompts/contradiction.py` | Stage 8 draft/verified schemas (`8.0.0`) separating observed evidence from model interpretation |
+| `apps/api/app/agents/nodes/contradiction_{analyst,verifier}.py`, `apps/api/app/agents/graph_contradiction.py` | Bounded LangGraph contradiction workflow with deterministic quote/span verifier and revision loop |
+| `apps/api/app/services/analysis.py`, `routers/analysis.py`, `schemas/analysis.py`, `services/report.py` | `contradiction` workflow dispatch, review endpoints (`GET .../reviews`, `PATCH .../findings/{id}/review`), and HTML/Markdown report export |
+| `packages/shared/src/index.ts`, `apps/web/src/lib/api/analysis.ts`, `apps/web/src/components/contradictions/contradiction-panel.tsx`, `apps/web/src/app/(app)/contradictions/` | Live Contradiction & Gap Hunter workspace with multi-doc selector, timeline, side-by-side source viewer, filters, review actions, and audit trail |
+| `apps/api/tests/test_contradiction_hunter.py` | Deterministic prompt, verifier, mock-fixture, insufficient-sources, report-escaping, and review-auth tests |
+
+---
 
 ### Stage 7 — Hybrid Legal Retrieval ✅
 

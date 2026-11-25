@@ -10,6 +10,9 @@ import type {
   AIStatus,
   CaseAnalysisRequest,
   CaseAnalysisResult,
+  ContradictionReviewStatus,
+  FindingReview,
+  FindingReviewListResponse,
   WorkflowRun,
   WorkflowRunListResponse,
   WorkflowStatus,
@@ -17,7 +20,7 @@ import type {
 
 export function startCaseAnalysis(
   caseId: string,
-  input: CaseAnalysisRequest = {},
+  input: CaseAnalysisRequest & { workflow_type?: "case_analysis" | "contradiction" } = {},
 ) {
   return apiClient.post<WorkflowRun>(
     `/api/v1/cases/${caseId}/analysis`,
@@ -25,10 +28,32 @@ export function startCaseAnalysis(
   );
 }
 
-export function listCaseAnalyses(caseId: string, limit = 20) {
+export function listCaseAnalyses(
+  caseId: string,
+  limit = 20,
+  workflowType: "case_analysis" | "contradiction" = "case_analysis",
+) {
   return apiClient.get<WorkflowRunListResponse>(
     `/api/v1/cases/${caseId}/analysis`,
-    { params: { limit } },
+    { params: { limit, workflow_type: workflowType } },
+  );
+}
+
+export function listFindingReviews(caseId: string, workflowId: string) {
+  return apiClient.get<FindingReviewListResponse>(
+    `/api/v1/cases/${caseId}/analysis/${workflowId}/reviews`,
+  );
+}
+
+export function updateFindingReview(
+  caseId: string,
+  workflowId: string,
+  findingId: string,
+  input: { status: ContradictionReviewStatus; note?: string | null },
+) {
+  return apiClient.patch<FindingReview>(
+    `/api/v1/cases/${caseId}/analysis/${workflowId}/findings/${encodeURIComponent(findingId)}/review`,
+    input,
   );
 }
 

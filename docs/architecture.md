@@ -526,6 +526,8 @@ See [decisions.md](decisions.md) for the rationale behind technology choices.
 | 3 ✅ | Database + Auth | PostgreSQL, Alembic, JWT authentication, ownership authorisation, live case CRUD |
 | 4 ✅ | Document ingestion | Upload, validation, extraction, chunking, storage abstraction, frontend UI |
 | 5 ✅ | Agentic workflows | Provider-agnostic AI layer, LangGraph case analysis, deterministic verifier, persisted runs, analysis UI |
-| 6 ◐ | Legal analysis | **Case Intelligence module complete**: dual-specialist graph, chronology, span verification, version metadata, report export, workspace. Hybrid retrieval, contradictions, precedents, advocate/judge remain pending |
-| 7 | Evaluation + deploy | LangSmith, RAGAS, Render/Vercel config, CI |
+| 6 ✅ | Legal analysis | Case Intelligence module: dual-specialist graph, chronology, span verification, version metadata, report export |
+| 7 ✅ | Hybrid retrieval | `pgvector` + FTS + RRF hybrid retrieval, `EmbeddingProvider`, `LegalCorpusProvider`, Legal Research UI |
+| 8 ✅ | Contradiction & Gap Hunter | Cross-document contradiction workflow, deterministic verifier, `finding_reviews` audit trail, `/contradictions` workspace |
+| 9+ | Future stages | Precedent Explorer, Advocate Mode, Judge/Clerk Mode, evaluation & CI |
 

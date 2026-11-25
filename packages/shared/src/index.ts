@@ -586,3 +586,85 @@ export interface CaseIndexResponse {
   embedding_model: string | null;
   dimensions: number;
 }
+
+// ---------------------------------------------------------------------------
+// Stage 8 — Contradiction & Gap Hunter
+// ---------------------------------------------------------------------------
+
+export type ContradictionFindingCategory =
+  | "direct_contradiction"
+  | "possible_inconsistency"
+  | "evidence_gap"
+  | "unsupported_claim";
+
+export type ContradictionReviewStatus =
+  | "unreviewed"
+  | "confirmed"
+  | "dismissed"
+  | "needs_review";
+
+export interface ContradictionFinding {
+  finding_id: string;
+  category: ContradictionFindingCategory;
+  dimension: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+  observed_evidence_summary: string;
+  model_interpretation: string;
+  side_a_label: string;
+  side_a_sources: AnalysisSourceRef[];
+  side_b_label: string | null;
+  side_b_sources: AnalysisSourceRef[];
+  support: AnalysisSupport;
+  issue_tag: string | null;
+  date_text: string | null;
+  date_sort_key: string;
+}
+
+export interface ContradictionResult {
+  workflow_id: string;
+  case_id: string;
+  generated_at: string;
+  provider: string;
+  model: string;
+  is_mock: boolean;
+  workflow_version: string;
+  prompt_version: string;
+  result_schema_version: string;
+  insufficient_sources: boolean;
+  summary: string;
+  findings: ContradictionFinding[];
+  timeline: AnalysisTimelineEvent[];
+  missing_information: string[];
+  limitations: string[];
+  verification: AnalysisVerificationSummary;
+  source_manifest: AnalysisSourceManifestEntry[];
+  source_stats: AnalysisSourceStats;
+  professional_review_required: boolean;
+  input_metadata: Record<string, unknown>;
+}
+
+export interface FindingReviewEvent {
+  previous_status: string | null;
+  new_status: ContradictionReviewStatus;
+  note: string | null;
+  user_id: string;
+  user_email: string | null;
+  at: string;
+}
+
+export interface FindingReview {
+  id: string;
+  workflow_id: string;
+  case_id: string;
+  finding_id: string;
+  status: ContradictionReviewStatus;
+  reviewer_note: string | null;
+  updated_by_user_id: string;
+  updated_at: string;
+  history: FindingReviewEvent[];
+}
+
+export interface FindingReviewListResponse {
+  items: FindingReview[];
+}

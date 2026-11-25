@@ -576,3 +576,157 @@ def render_case_report_markdown(
         "database was consulted for this report._"
     )
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Stage 8 — Contradiction & Gap Hunter report renderers
+# ---------------------------------------------------------------------------
+
+
+def render_contradiction_report_markdown(
+    case: Case,
+    run: WorkflowRun,
+    result: Any,
+    *,
+    reviews: dict[str, Any] | None = None,
+) -> str:
+    generated = result.generated_at
+    if generated.tzinfo is not None:
+        generated = generated.astimezone(timezone.utc)
+    review_map = reviews or {}
+    lines: list[str] = [
+        f"# Contradiction & Gap Hunter Report — {case.title}",
+        "",
+        f"- **Case number:** {case.case_number or 'Not specified'}",
+        f"- **Generated:** {generated.strftime('%d %B %Y, %H:%M UTC')}",
+        f"- **Workflow:** {run.id} (v{result.workflow_version})",
+        f"- **Provider / model:** {result.provider} / {result.model}"
+        + (" (development fixture)" if result.is_mock else ""),
+        f"- **Verification:** {result.verification.supported} supported, "
+        f"{result.verification.partially_supported} source-cited, "
+        f"{result.verification.unsupported} unsupported",
+        "",
+        "> **Professional legal review required.** Potential contradictions and "
+        "inconsistencies are analytical flags, not proof of dishonesty or wrongdoing.",
+        "",
+        "## Summary",
+        "",
+        result.summary,
+        "",
+        "## Findings",
+        "",
+    ]
+    if not result.findings:
+        lines.append("_No findings recorded._")
+    for f in result.findings:
+        rev = review_map.get(f.finding_id)
+        rev_status = rev.status if rev else "unreviewed"
+        lines.append(
+            f"### [{f.finding_id}] {f.title} ({f.category} · {f.severity} · review: {rev_status})"
+        )
+        lines.append("")
+        lines.append(f"- **Observed evidence:** {f.observed_evidence_summary}")
+        lines.append(f"- **Model interpretation:** {f.model_interpretation}")
+        if f.side_a_sources:
+            refs_a = "; ".join(
+                f"{r.document_name} p.{r.page_number}"
+                + (f' "{r.quote}"' if r.quote else "")
+                for r in f.side_a_sources
+            )
+            lines.append(f"- **{f.side_a_label}:** {refs_a}")
+        if f.side_b_sources:
+            refs_b = "; ".join(
+                f"{r.document_name} p.{r.page_number}"
+                + (f' "{r.quote}"' if r.quote else "")
+                for r in f.side_b_sources
+            )
+            lines.append(f"- **{f.side_b_label or 'Side B'}:** {refs_b}")
+        if rev and rev.reviewer_note:
+            lines.append(f"- **Reviewer note:** {rev.reviewer_note}")
+        lines.append("")
+
+    lines.append("## Chronological timeline")
+    lines.append("")
+    if not result.timeline:
+        lines.append("_No dated events extracted._")
+    for ev in result.timeline:
+        refs = ", ".join(f"{r.document_name} p.{r.page_number}" for r in ev.sources)
+        lines.append(f"- **{ev.date_text}** — {ev.event}" + (f" ({refs})" if refs else ""))
+    lines.append("")
+    lines.append("## Limitations")
+    lines.append("")
+    lines.extend(f"- {lim}" for lim in result.limitations)
+    return "\n".join(lines)
+
+
+def render_contradiction_report_html(
+    case: Case,
+    run: WorkflowRun,
+    result: Any,
+    *,
+    reviews: dict[str, Any] | None = None,
+) -> str:
+    generated = result.generated_at
+    if generated.tzinfo is not None:
+        generated = generated.astimezone(timezone.utc)
+    review_map = reviews or {}
+    finding_blocks: list[str] = []
+    for f in result.findings:
+        rev = review_map.get(f.finding_id)
+        rev_status = rev.status if rev else "unreviewed"
+        rev_note = rev.reviewer_note if rev else None
+        finding_blocks.append(
+            "<div class='card'>"
+            f"<h3>[{_e(f.finding_id)}] {_e(f.title)}</h3>"
+            f"<div class='meta'>{_e(f.category)} · severity: {_e(f.severity)} · "
+            f"review: <strong>{_e(rev_status)}</strong> · {_badge(f.support)}</div>"
+            f"<p><strong>Observed evidence:</strong> {_e(f.observed_evidence_summary)}</p>"
+            f"<p><strong>Model interpretation:</strong> {_e(f.model_interpretation)}</p>"
+            f"<div class='sources'><strong>{_e(f.side_a_label)}:</strong> {_source_links(f.side_a_sources)}</div>"
+            + (
+                f"<div class='sources'><strong>{_e(f.side_b_label or 'Side B')}:</strong> {_source_links(f.side_b_sources)}</div>"
+                if f.side_b_sources
+                else ""
+            )
+            + (f"<p><strong>Reviewer note:</strong> {_e(rev_note)}</p>" if rev_note else "")
+            + "</div>"
+        )
+    timeline_rows = "".join(
+        f"<li><strong>{_e(ev.date_text)}</strong> — {_e(ev.event)} "
+        f"<div class='sources'>{_source_links(ev.sources)}</div></li>"
+        for ev in result.timeline
+    )
+    lims = "".join(f"<li>{_e(lim)}</li>" for lim in result.limitations)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Contradiction &amp; Gap Hunter Report — {_e(case.title)}</title>
+<style>
+  body {{ font-family: Georgia, 'Times New Roman', serif; color: #0f172a; max-width: 900px; margin: 28px auto; padding: 0 20px; line-height: 1.5; }}
+  h1, h2, h3 {{ font-family: system-ui, -apple-system, sans-serif; color: #0f172a; }}
+  .notice {{ background: #fffbeb; border: 1px solid #fde68a; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin: 14px 0; }}
+  .card {{ border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; margin-bottom: 14px; }}
+  .meta {{ font-size: 12px; color: #475569; margin-bottom: 8px; font-family: system-ui, sans-serif; }}
+  .sources {{ font-size: 12px; color: #334155; margin-top: 4px; }}
+  .source {{ display: inline-block; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; margin-right: 6px; }}
+  .badge {{ font-size: 11px; padding: 2px 6px; border-radius: 4px; font-family: system-ui, sans-serif; }}
+  .ok {{ background: #dcfce7; color: #166534; }}
+  .warn {{ background: #fef3c7; color: #92400e; }}
+  .bad {{ background: #fee2e2; color: #991b1b; }}
+</style>
+</head>
+<body>
+<h1>Contradiction &amp; Gap Hunter Report — {_e(case.title)}</h1>
+<div class="meta">Generated {_e(generated.strftime('%d %B %Y, %H:%M UTC'))} · Workflow {_e(run.id)}</div>
+<div class="notice"><strong>Professional legal review required.</strong> Potential contradictions and inconsistencies are analytical flags for human review, not proof of dishonesty or wrongdoing.</div>
+<h2>Summary</h2>
+<p>{_e(result.summary)}</p>
+<h2>Findings ({len(result.findings)})</h2>
+{"".join(finding_blocks) if finding_blocks else "<p>No findings recorded.</p>"}
+<h2>Chronological Timeline</h2>
+<ul>{timeline_rows if timeline_rows else "<li>No dated events extracted.</li>"}</ul>
+<h2>Limitations</h2>
+<ul>{lims}</ul>
+</body>
+</html>"""

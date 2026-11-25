@@ -168,13 +168,14 @@ function sourceKey(source: AnalysisSourceRef, index: number): string {
 }
 
 function SourceChips({
-  sources,
+  sources = [],
   onOpenSource,
 }: {
-  sources: AnalysisSourceRef[];
+  sources?: AnalysisSourceRef[];
   onOpenSource: (source: AnalysisSourceRef) => void;
 }) {
-  if (sources.length === 0) {
+  const safeSources = sources ?? [];
+  if (safeSources.length === 0) {
     return (
       <p className="mt-2 text-[11px] text-amber-800">
         No source reference was verified for this item.
@@ -183,7 +184,7 @@ function SourceChips({
   }
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
-      {sources.map((source, index) => (
+      {safeSources.map((source, index) => (
         <Button
           key={sourceKey(source, index)}
           type="button"
@@ -363,8 +364,20 @@ function SourceDialog({
 
 function VerificationPanel({ result }: { result: CaseAnalysisResult }) {
   const rate = verificationRate(result);
+  const verification = result.verification ?? {
+    total_claims: 0,
+    supported: 0,
+    partially_supported: 0,
+    unsupported: 0,
+    invalid_source_refs: 0,
+    verified_spans: 0,
+    unverified_quotes: 0,
+    retried: false,
+    categories: [],
+    notes: [],
+  };
   const stats = result.source_stats;
-  const categories = result.verification.categories.filter(
+  const categories = (verification.categories ?? []).filter(
     (category) => category.total > 0,
   );
 
@@ -378,8 +391,8 @@ function VerificationPanel({ result }: { result: CaseAnalysisResult }) {
           </span>
         </div>
         <span className="text-xs text-muted-foreground">
-          {result.verification.total_claims} statement
-          {result.verification.total_claims === 1 ? "" : "s"} checked
+          {verification.total_claims ?? 0} statement
+          {(verification.total_claims ?? 0) === 1 ? "" : "s"} checked
         </span>
       </div>
 
@@ -394,23 +407,23 @@ function VerificationPanel({ result }: { result: CaseAnalysisResult }) {
       <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
         <div className="rounded-md border border-teal-200 bg-teal-50 px-2.5 py-2 text-teal-900">
           <p className="text-[10px] uppercase tracking-wide text-teal-700">Supported</p>
-          <p className="text-base font-semibold">{result.verification.supported}</p>
+          <p className="text-base font-semibold">{verification.supported ?? 0}</p>
         </div>
         <div className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-amber-900">
           <p className="text-[10px] uppercase tracking-wide text-amber-700">Partial</p>
           <p className="text-base font-semibold">
-            {result.verification.partially_supported}
+            {verification.partially_supported ?? 0}
           </p>
         </div>
         <div className="rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-red-900">
           <p className="text-[10px] uppercase tracking-wide text-red-700">Unsupported</p>
-          <p className="text-base font-semibold">{result.verification.unsupported}</p>
+          <p className="text-base font-semibold">{verification.unsupported ?? 0}</p>
         </div>
         <div className="rounded-md border border-border bg-card px-2.5 py-2 text-foreground">
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
             Verified spans
           </p>
-          <p className="text-base font-semibold">{result.verification.verified_spans}</p>
+          <p className="text-base font-semibold">{verification.verified_spans ?? 0}</p>
         </div>
       </div>
 
@@ -433,21 +446,23 @@ function VerificationPanel({ result }: { result: CaseAnalysisResult }) {
         </details>
       )}
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-muted-foreground sm:grid-cols-3">
-        <span>
-          Documents analysed: {stats.documents_analyzed}/{stats.documents_available}
-        </span>
-        <span>
-          Pages included: {stats.pages_included}/{stats.pages_available}
-        </span>
-        <span>Characters included: {stats.characters_included.toLocaleString()}</span>
-        <span>Duplicate pages skipped: {stats.duplicate_pages_skipped}</span>
-        <span>Short pages: {stats.short_pages}</span>
-        <span>Truncated pages: {stats.truncated_pages}</span>
-        <span>OCR required: {stats.ocr_required_documents}</span>
-        <span>Incomplete extraction: {stats.incomplete_extraction_documents}</span>
-        <span>Invalid source refs rejected: {result.verification.invalid_source_refs}</span>
-      </div>
+      {stats && (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-muted-foreground sm:grid-cols-3">
+          <span>
+            Documents analysed: {stats.documents_analyzed ?? 0}/{stats.documents_available ?? 0}
+          </span>
+          <span>
+            Pages included: {stats.pages_included ?? 0}/{stats.pages_available ?? 0}
+          </span>
+          <span>Characters included: {(stats.characters_included ?? 0).toLocaleString()}</span>
+          <span>Duplicate pages skipped: {stats.duplicate_pages_skipped ?? 0}</span>
+          <span>Short pages: {stats.short_pages ?? 0}</span>
+          <span>Truncated pages: {stats.truncated_pages ?? 0}</span>
+          <span>OCR required: {stats.ocr_required_documents ?? 0}</span>
+          <span>Incomplete extraction: {stats.incomplete_extraction_documents ?? 0}</span>
+          <span>Invalid source refs rejected: {verification.invalid_source_refs ?? 0}</span>
+        </div>
+      )}
 
       {result.verification.retried && (
         <p className="text-[11px] text-muted-foreground">
@@ -762,7 +777,22 @@ function ResultView({
   rerunning: boolean;
 }) {
   const generated = new Date(result.generated_at);
-  const legalIssues = result.issue_analysis;
+  const parties = result.parties ?? [];
+  const entities = result.entities ?? [];
+  const amounts = result.amounts ?? [];
+  const facts = result.facts ?? [];
+  const proceduralHistory = result.procedural_history ?? [];
+  const timeline = result.timeline ?? [];
+  const legalIssues = result.issue_analysis ?? [];
+  const legacyLegalIssues = result.legal_issues ?? [];
+  const evidenceQuestions = result.evidence_questions ?? [];
+  const ambiguities = result.ambiguities ?? [];
+  const inferences = result.inferences ?? [];
+  const unverifiedHypotheses = result.unverified_hypotheses ?? [];
+  const missingInformation = result.missing_information ?? [];
+  const verificationNotes = result.verification?.notes ?? [];
+  const limitations = result.limitations ?? [];
+  const sourceManifest = result.source_manifest ?? [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -875,14 +905,14 @@ function ResultView({
 
           <VerificationPanel result={result} />
 
-          {result.parties.length > 0 && (
+          {parties.length > 0 && (
             <section className="flex flex-col gap-2">
               <SectionHeading
                 icon={<Users className="h-3.5 w-3.5" aria-hidden="true" />}
                 title="Parties"
-                count={result.parties.length}
+                count={parties.length}
               />
-              <PartyList parties={result.parties} onOpenSource={onOpenSource} />
+              <PartyList parties={parties} onOpenSource={onOpenSource} />
             </section>
           )}
 
@@ -892,29 +922,29 @@ function ResultView({
             <SectionHeading
               icon={<Users className="h-3.5 w-3.5" aria-hidden="true" />}
               title="Named entities"
-              count={result.entities.length}
+              count={entities.length}
             />
-            <EntityList entities={result.entities} onOpenSource={onOpenSource} />
+            <EntityList entities={entities} onOpenSource={onOpenSource} />
           </section>
 
           <section className="flex flex-col gap-2">
             <SectionHeading
               icon={<Landmark className="h-3.5 w-3.5" aria-hidden="true" />}
               title="Amounts"
-              count={result.amounts.length}
+              count={amounts.length}
             />
-            <AmountList amounts={result.amounts} onOpenSource={onOpenSource} />
+            <AmountList amounts={amounts} onOpenSource={onOpenSource} />
           </section>
 
           <section className="flex flex-col gap-2">
             <SectionHeading
               icon={<FileText className="h-3.5 w-3.5" aria-hidden="true" />}
               title="Material facts"
-              count={result.facts.length}
+              count={facts.length}
               hint="Directly supported by the cited pages"
             />
             <ClaimList
-              claims={result.facts}
+              claims={facts}
               empty="No facts were extracted from the supplied pages."
               onOpenSource={onOpenSource}
             />
@@ -924,10 +954,10 @@ function ResultView({
             <SectionHeading
               icon={<Clock className="h-3.5 w-3.5" aria-hidden="true" />}
               title="Procedural history"
-              count={result.procedural_history.length}
+              count={proceduralHistory.length}
             />
             <ProceduralList
-              events={result.procedural_history}
+              events={proceduralHistory}
               onOpenSource={onOpenSource}
             />
           </section>
@@ -936,10 +966,10 @@ function ResultView({
             <SectionHeading
               icon={<Clock className="h-3.5 w-3.5" aria-hidden="true" />}
               title="Chronology"
-              count={result.timeline.length}
+              count={timeline.length}
               hint="Ordered by normalised date where possible"
             />
-            <ChronologyList events={result.timeline} onOpenSource={onOpenSource} />
+            <ChronologyList events={timeline} onOpenSource={onOpenSource} />
           </section>
 
           <Separator />
@@ -953,9 +983,9 @@ function ResultView({
             />
             {legalIssues.length > 0 ? (
               <IssueList issues={legalIssues} onOpenSource={onOpenSource} />
-            ) : result.legal_issues.length > 0 ? (
+            ) : legacyLegalIssues.length > 0 ? (
               <ClaimList
-                claims={result.legal_issues}
+                claims={legacyLegalIssues}
                 empty="No legal issues were identified."
                 onOpenSource={onOpenSource}
               />
@@ -970,10 +1000,10 @@ function ResultView({
             <SectionHeading
               icon={<HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />}
               title="Questions requiring further evidence"
-              count={result.evidence_questions.length}
+              count={evidenceQuestions.length}
             />
             <EvidenceQuestionList
-              questions={result.evidence_questions}
+              questions={evidenceQuestions}
               onOpenSource={onOpenSource}
             />
           </section>
@@ -982,10 +1012,10 @@ function ResultView({
             <SectionHeading
               icon={<AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />}
               title="Ambiguity and uncertainty"
-              count={result.ambiguities.length}
+              count={ambiguities.length}
             />
             <AmbiguityList
-              ambiguities={result.ambiguities}
+              ambiguities={ambiguities}
               onOpenSource={onOpenSource}
             />
           </section>
@@ -994,32 +1024,32 @@ function ResultView({
             <SectionHeading
               icon={<Brain className="h-3.5 w-3.5" aria-hidden="true" />}
               title="Model inferences"
-              count={result.inferences.length}
+              count={inferences.length}
               hint="Reasoning beyond a direct statement"
             />
             <ClaimList
-              claims={result.inferences}
+              claims={inferences}
               empty="No separate model inferences were recorded."
               onOpenSource={onOpenSource}
             />
           </section>
 
-          {result.unverified_hypotheses.length > 0 && (
+          {unverifiedHypotheses.length > 0 && (
             <section className="flex flex-col gap-2">
-              <SectionHeading title="Unverified hypotheses" count={result.unverified_hypotheses.length} />
+              <SectionHeading title="Unverified hypotheses" count={unverifiedHypotheses.length} />
               <ul className="list-disc space-y-1 pl-5 text-sm text-amber-900">
-                {result.unverified_hypotheses.map((item, index) => (
+                {unverifiedHypotheses.map((item, index) => (
                   <li key={`${item}-${index}`}>{item}</li>
                 ))}
               </ul>
             </section>
           )}
 
-          {result.missing_information.length > 0 && (
+          {missingInformation.length > 0 && (
             <section className="flex flex-col gap-2">
-              <SectionHeading title="Missing information" count={result.missing_information.length} />
+              <SectionHeading title="Missing information" count={missingInformation.length} />
               <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                {result.missing_information.map((item, index) => (
+                {missingInformation.map((item, index) => (
                   <li key={`${item}-${index}`}>{item}</li>
                 ))}
               </ul>
@@ -1029,20 +1059,20 @@ function ResultView({
           <section className="flex flex-col gap-2">
             <SectionHeading title="Limitations and verification notes" />
             <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-              {[...result.verification.notes, ...result.limitations].map((item, index) => (
+              {[...verificationNotes, ...limitations].map((item, index) => (
                 <li key={`${item}-${index}`}>{item}</li>
               ))}
             </ul>
           </section>
 
-          {result.source_manifest.length > 0 && (
+          {sourceManifest.length > 0 && (
             <details className="rounded-md border border-border bg-muted/20 px-3 py-2">
               <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Sources supplied to the analysts ({result.source_manifest.length} page
+                Sources supplied to the analysts ({sourceManifest.length} page
                 excerpts)
               </summary>
               <ul className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
-                {result.source_manifest.map((source) => (
+                {sourceManifest.map((source) => (
                   <li key={source.source_id}>
                     <span className="font-mono">{source.source_id}</span> ·{" "}
                     {source.document_name} · p.{source.page_number}
@@ -1438,7 +1468,7 @@ export function AnalysisPanel({
               <span className="text-xs text-muted-foreground">{run.progress}%</span>
             </div>
             <Progress value={run.progress} aria-label="Analysis progress" />
-            {run.steps.length > 0 && (
+            {(run.steps ?? []).length > 0 && (
               <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
                 {run.steps.slice(-6).map((step, index) => (
                   <li

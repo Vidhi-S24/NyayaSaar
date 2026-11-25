@@ -126,6 +126,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 "legal_records",
                 "legal_record_chunks",
                 "workflow_runs",
+                "finding_reviews",
             }
             missing_tables = required_tables - set(tables)
             if missing_tables:

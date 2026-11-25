@@ -21,20 +21,29 @@ from sqlalchemy.orm import sessionmaker
 
 from app.agents.context import WorkflowContext
 from app.agents.graph import run_case_analysis_graph
+from app.agents.graph_contradiction import run_contradiction_graph
 from app.agents.schemas import (
     CASE_INTELLIGENCE_PROMPT_VERSION,
     CASE_INTELLIGENCE_RESULT_SCHEMA_VERSION,
     CASE_INTELLIGENCE_WORKFLOW_VERSION,
 )
+from app.agents.schemas_contradiction import (
+    CONTRADICTION_PROMPT_VERSION,
+    CONTRADICTION_RESULT_SCHEMA_VERSION,
+    CONTRADICTION_WORKFLOW_VERSION,
+)
 from app.agents.state import CaseAnalysisState
 from app.agents.tools.sources import load_case_sources
 from app.ai.base import LLMProvider, ProviderError, ProviderNotConfiguredError
+from app.ai.embeddings import get_embedding_provider
 from app.ai.registry import get_provider
 from app.config import Settings, get_settings
 from app.db.models.case import Case
 from app.db.models.document import Document
+from app.db.models.finding_review import FindingReview
 from app.db.models.workflow import WorkflowRun
 from app.schemas.analysis import CaseAnalysisRequest
+from app.services.retrieval.hybrid import RetrievalFilters, hybrid_search
 
 logger = logging.getLogger("nyayasaar.analysis")
 
@@ -295,7 +304,7 @@ class WorkflowRunner:
         run.progress = 5
         run.current_step = "starting"
         wtype = run.workflow_type or "case_analysis"
-        if wtype != "case_analysis":
+        if wtype not in ("case_analysis", "contradiction"):
             await self._fail(
                 db,
                 run,
@@ -303,9 +312,14 @@ class WorkflowRunner:
                 "This workflow type is not available in this release.",
             )
             return
-        run.workflow_version = CASE_INTELLIGENCE_WORKFLOW_VERSION
-        run.prompt_version = CASE_INTELLIGENCE_PROMPT_VERSION
-        run.result_schema_version = CASE_INTELLIGENCE_RESULT_SCHEMA_VERSION
+        if wtype == "contradiction":
+            run.workflow_version = CONTRADICTION_WORKFLOW_VERSION
+            run.prompt_version = CONTRADICTION_PROMPT_VERSION
+            run.result_schema_version = CONTRADICTION_RESULT_SCHEMA_VERSION
+        else:
+            run.workflow_version = CASE_INTELLIGENCE_WORKFLOW_VERSION
+            run.prompt_version = CASE_INTELLIGENCE_PROMPT_VERSION
+            run.result_schema_version = CASE_INTELLIGENCE_RESULT_SCHEMA_VERSION
         run.attempt_count = (run.attempt_count or 0) + 1
         run.error_code = None
         run.error_message = None
@@ -428,9 +442,44 @@ class WorkflowRunner:
             max_verifier_retries=settings.agent_max_verifier_retries,
         )
 
+        if wtype == "contradiction" and sources:
+            query_text = (payload.get("focus") or case.title or "").strip()
+            if query_text:
+                try:
+                    emb = get_embedding_provider(settings)
+                    hits, _ = await hybrid_search(
+                        db,
+                        query=query_text,
+                        user_id=run.user_id,
+                        filters=RetrievalFilters(
+                            case_id=run.case_id,
+                            source_type="case_document",
+                        ),
+                        settings=settings,
+                        embedding_provider=emb,
+                        limit=8,
+                    )
+                    case_context["retrieved_pairs"] = [
+                        {
+                            "title": h.title,
+                            "page_number": h.page_number,
+                            "hybrid_score": h.hybrid_score,
+                            "text": h.text,
+                        }
+                        for h in hits
+                    ]
+                except Exception:
+                    logger.debug("Optional hybrid pre-retrieval skipped for contradiction run")
+
+        graph_fn = (
+            run_contradiction_graph
+            if wtype == "contradiction"
+            else run_case_analysis_graph
+        )
+
         try:
             final_state = await asyncio.wait_for(
-                run_case_analysis_graph(ctx, initial_state),
+                graph_fn(ctx, initial_state),
                 timeout=settings.agent_execution_timeout_s,
             )
         except TimeoutError:
@@ -594,3 +643,105 @@ async def recover_stale_workflows(
             "Stale workflow recovery skipped: %s", type(exc).__name__
         )
     return recovered
+
+
+# ---------------------------------------------------------------------------
+# Stage 8 — Finding review & audit trail
+# ---------------------------------------------------------------------------
+
+
+async def list_finding_reviews(
+    db: AsyncSession,
+    *,
+    case_id: str,
+    workflow_id: str,
+    user_id: str,
+) -> list[FindingReview] | None:
+    loaded = await get_run_and_case(
+        db, workflow_id=workflow_id, user_id=user_id, case_id=case_id
+    )
+    if loaded is None:
+        return None
+    result = await db.execute(
+        select(FindingReview)
+        .where(
+            FindingReview.workflow_id == workflow_id,
+            FindingReview.case_id == case_id,
+        )
+        .order_by(FindingReview.updated_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def upsert_finding_review(
+    db: AsyncSession,
+    *,
+    case_id: str,
+    workflow_id: str,
+    finding_id: str,
+    user_id: str,
+    user_email: str | None,
+    status: str,
+    note: str | None,
+) -> FindingReview | None:
+    loaded = await get_run_and_case(
+        db, workflow_id=workflow_id, user_id=user_id, case_id=case_id
+    )
+    if loaded is None:
+        return None
+    _, run = loaded
+    findings = (run.result or {}).get("findings") or []
+    known_ids = {str(f.get("finding_id", "")) for f in findings}
+    if finding_id not in known_ids:
+        raise ValueError("Finding ID not found in this workflow result.")
+
+    res = await db.execute(
+        select(FindingReview).where(
+            FindingReview.workflow_id == workflow_id,
+            FindingReview.finding_id == finding_id,
+        )
+    )
+    existing = res.scalar_one_or_none()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if existing is None:
+        event = {
+            "previous_status": "unreviewed",
+            "new_status": status,
+            "note": note,
+            "user_id": user_id,
+            "user_email": user_email,
+            "at": now_iso,
+        }
+        review = FindingReview(
+            id=str(uuid.uuid4()),
+            workflow_id=workflow_id,
+            case_id=case_id,
+            finding_id=finding_id,
+            status=status,
+            reviewer_note=note,
+            updated_by_user_id=user_id,
+            history=[event],
+        )
+        db.add(review)
+        await db.flush()
+        await db.refresh(review)
+        return review
+
+    event = {
+        "previous_status": existing.status,
+        "new_status": status,
+        "note": note,
+        "user_id": user_id,
+        "user_email": user_email,
+        "at": now_iso,
+    }
+    history = list(existing.history or [])
+    history.append(event)
+    existing.status = status
+    existing.reviewer_note = note
+    existing.updated_by_user_id = user_id
+    existing.history = history
+    await db.flush()
+    await db.refresh(existing)
+    return existing

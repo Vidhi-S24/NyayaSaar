@@ -165,8 +165,8 @@ From `apps/api/` (with the venv active):
 | 5 | Provider-agnostic AI + LangGraph case analysis | ✅ Complete |
 | 6 | Case Intelligence module (source-grounded workflow, chronology, verifier, export) | ✅ Complete |
 | 7 | Hybrid legal retrieval, pgvector, legal-source providers, and Legal Research UI | ✅ Complete |
-| 8 | Contradiction & Gap Hunter, Precedent Explorer, Advocate & Judge/Clerk modes | ⏳ Pending |
-| 9 | Evaluation, monitoring, and deployment | ⏳ Pending |
+| 8 | Contradiction & Gap Hunter (cross-document workflow, verifier, review audit trail, `/contradictions` UI) | ✅ Complete |
+| 9+ | Precedent Explorer, Advocate & Judge/Clerk modes, evaluation, and deployment | ⏳ Pending |
 
 ---
 

@@ -371,3 +371,17 @@
 **Decision:** `app/services/legal_corpus.py` implements `LegalCorpusProvider` with `JsonCorpusProvider`, `DatabaseCorpusProvider` (via `legal_records`), and `FixtureCorpusProvider`. When `LEGAL_CORPUS_PROVIDER=none`, fixture records are returned only with `is_fixture=True` and `[SAMPLE FIXTURE — NOT A REAL CITATION]` labels.
 **Rationale:** NyayaSaar never fabricates legal authorities or scrapes restricted databases. Unconfigured deployments must remain usable while making fixture status unmistakable.
 **Consequence:** Adding a future licensed legal database requires only implementing `LegalCorpusProvider.search_records` without modifying retrieval or UI contracts.
+
+### D-048: Contradiction & Gap Hunter separates observed evidence from model interpretation and uses bounded verification
+
+**Date:** Stage 8
+**Decision:** `app/agents/schemas_contradiction.py` and `app/agents/graph_contradiction.py` implement a dedicated `contradiction` LangGraph workflow (`orchestrator -> contradiction_analyst -> contradiction_verifier -> finalize`) that optionally enriches prompts with Stage 7 `hybrid_search` candidate passages, strictly separates `observed_evidence_summary` and verified Side A / Side B source passages from `model_interpretation`, and runs deterministic quote/span + date verification with bounded revision (`AGENT_MAX_VERIFIER_RETRIES`).
+**Rationale:** Separating raw document excerpts from model reasoning prevents analytical flags from being misread as factual rulings or allegations of dishonesty, while reusing Stage 6 deterministic span verification ensures every cited passage resolves to a real document page.
+**Consequence:** Every contradiction finding carries verifiable `VerifiedSourceRef` objects, an explicit support status, and mandatory professional-review disclaimers.
+
+### D-049: Human review decisions and audit trails are persisted in `finding_reviews`
+
+**Date:** Stage 8
+**Decision:** Migration `006_add_finding_reviews.py` adds a `finding_reviews` table keyed by `(workflow_id, finding_id)` storing `status` (`unreviewed | confirmed | dismissed | needs_review`), `reviewer_note`, `updated_by_user_id`, and an append-only `history` JSON list of `{previous_status, new_status, note, user_id, user_email, at}`.
+**Rationale:** Persisting review decisions separately from `WorkflowRun.result` preserves immutable workflow output while maintaining an auditable trail of human review changes across sessions and exported HTML/Markdown reports.
+**Consequence:** Reviewers can update decisions and notes without mutating the underlying verified AI output.
