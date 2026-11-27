@@ -125,6 +125,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 "document_chunks",
                 "legal_records",
                 "legal_record_chunks",
+                "citation_links",
                 "workflow_runs",
                 "finding_reviews",
             }

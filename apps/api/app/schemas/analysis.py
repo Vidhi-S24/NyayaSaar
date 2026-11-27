@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 from app.agents.schemas import CaseAnalysisResult
 from app.agents.schemas_contradiction import ContradictionResult, ReviewStatus
+from app.agents.schemas_precedent import PrecedentResult
 
 if TYPE_CHECKING:
     from app.db.models.workflow import WorkflowRun as WorkflowRunModel
@@ -19,9 +20,9 @@ DocumentId = Annotated[str, StringConstraints(min_length=1, max_length=36)]
 class CaseAnalysisRequest(BaseModel):
     """Optional analysis inputs. Empty body = analyse all ready documents."""
 
-    workflow_type: Literal["case_analysis", "contradiction"] = Field(
+    workflow_type: Literal["case_analysis", "contradiction", "precedent"] = Field(
         default="case_analysis",
-        description="Workflow to execute: case_analysis | contradiction.",
+        description="Workflow to execute: case_analysis | contradiction | precedent.",
     )
     document_ids: list[DocumentId] | None = Field(
         default=None,
@@ -70,7 +71,7 @@ class WorkflowRunResponse(BaseModel):
     result_schema_version: str | None = None
     document_ids: list[str] = Field(default_factory=list)
     focus: str | None = None
-    result: CaseAnalysisResult | ContradictionResult | dict[str, Any] | None = None
+    result: CaseAnalysisResult | ContradictionResult | PrecedentResult | dict[str, Any] | None = None
     steps: list[WorkflowStepResponse] = Field(default_factory=list)
     token_usage: dict[str, Any] = Field(default_factory=dict)
     error: WorkflowErrorResponse | None = None
@@ -183,3 +184,38 @@ class FindingReviewResponse(BaseModel):
 
 class FindingReviewListResponse(BaseModel):
     items: list[FindingReviewResponse] = Field(default_factory=list)
+
+
+class CitationLinkResponse(BaseModel):
+    id: str
+    from_record_id: str
+    to_record_id: str | None = None
+    to_citation_text: str
+    relationship_type: str
+    source_passage: str | None = None
+    source_provider: str
+    is_resolved: bool
+    confidence: str
+    workflow_id: str | None = None
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, row: Any) -> CitationLinkResponse:
+        return cls(
+            id=row.id,
+            from_record_id=row.from_record_id,
+            to_record_id=row.to_record_id,
+            to_citation_text=row.to_citation_text,
+            relationship_type=row.relationship_type,
+            source_passage=row.source_passage,
+            source_provider=row.source_provider,
+            is_resolved=row.is_resolved,
+            confidence=row.confidence,
+            workflow_id=row.workflow_id,
+            created_at=row.created_at,
+        )
+
+
+class CitationLinkListResponse(BaseModel):
+    items: list[CitationLinkResponse]
+    total: int

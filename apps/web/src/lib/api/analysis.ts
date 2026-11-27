@@ -1,10 +1,3 @@
-/**
- * Analysis API — typed wrappers around Stage 6 Case Intelligence workflows.
- *
- * Long-running work is queued server-side; clients poll the run endpoint.
- * Provider keys never reach the browser. Results are AI-assisted and must be
- * independently verified by a legal professional.
- */
 import { apiClient, downloadRequest } from "@/lib/api-client";
 import type {
   AIStatus,
@@ -20,7 +13,7 @@ import type {
 
 export function startCaseAnalysis(
   caseId: string,
-  input: CaseAnalysisRequest & { workflow_type?: "case_analysis" | "contradiction" } = {},
+  input: CaseAnalysisRequest & { workflow_type?: "case_analysis" | "contradiction" | "precedent" } = {},
 ) {
   return apiClient.post<WorkflowRun>(
     `/api/v1/cases/${caseId}/analysis`,
@@ -31,7 +24,7 @@ export function startCaseAnalysis(
 export function listCaseAnalyses(
   caseId: string,
   limit = 20,
-  workflowType: "case_analysis" | "contradiction" = "case_analysis",
+  workflowType: "case_analysis" | "contradiction" | "precedent" = "case_analysis",
 ) {
   return apiClient.get<WorkflowRunListResponse>(
     `/api/v1/cases/${caseId}/analysis`,
@@ -160,4 +153,33 @@ export function verificationRate(result: CaseAnalysisResult): number {
 export function truncate(text: string, max = 180): string {
   const cleaned = text.trim();
   return cleaned.length > max ? `${cleaned.slice(0, max - 1)}…` : cleaned;
+}
+
+// ---------------------------------------------------------------------------
+// Stage 9 — Precedent Explorer
+// ---------------------------------------------------------------------------
+
+/** Start a Precedent Explorer workflow for a case. */
+export function startPrecedentSearch(
+  caseId: string,
+  input: { document_ids?: string[]; focus?: string } = {},
+) {
+  return apiClient.post<WorkflowRun>(
+    `/api/v1/cases/${caseId}/analysis`,
+    { ...input, workflow_type: "precedent" },
+  );
+}
+
+/** List precedent analysis runs for a case. */
+export function listPrecedentAnalyses(caseId: string, limit = 20) {
+  return apiClient.get<WorkflowRunListResponse>(
+    `/api/v1/cases/${caseId}/analysis`,
+    { params: { limit, workflow_type: "precedent" } },
+  );
+}
+
+export function listCitationsForRun(caseId: string, workflowId: string) {
+  return apiClient.get<import("@nyayasaar/shared").CitationLinkListResponse>(
+    `/api/v1/cases/${caseId}/analysis/${workflowId}/citations`,
+  );
 }

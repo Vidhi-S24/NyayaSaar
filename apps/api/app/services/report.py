@@ -20,8 +20,13 @@ from app.agents.schemas import (
     VerifiedSourceRef,
     VerificationCategoryCount,
 )
+from app.agents.schemas_precedent import PrecedentResult
 from app.db.models.case import Case
 from app.db.models.workflow import WorkflowRun
+from app.services.report_precedent import (  # noqa: F401 - re-exported
+    render_precedent_report_html,
+    render_precedent_report_markdown,
+)
 
 SUPPORT_LABELS = {
     "supported": "Supported by source",

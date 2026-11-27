@@ -166,7 +166,8 @@ From `apps/api/` (with the venv active):
 | 6 | Case Intelligence module (source-grounded workflow, chronology, verifier, export) | ✅ Complete |
 | 7 | Hybrid legal retrieval, pgvector, legal-source providers, and Legal Research UI | ✅ Complete |
 | 8 | Contradiction & Gap Hunter (cross-document workflow, verifier, review audit trail, `/contradictions` UI) | ✅ Complete |
-| 9+ | Precedent Explorer, Advocate & Judge/Clerk modes, evaluation, and deployment | ⏳ Pending |
+| 9 | Precedent Explorer & Conflict Detector (`citation_links`, optional Neo4j + DB fallback, `precedent` workflow, `/precedents` UI) | ✅ Complete |
+| 10+ | Advocate & Judge/Clerk modes, evaluation, and deployment | ⏳ Pending |
 
 ---
 

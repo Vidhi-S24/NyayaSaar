@@ -385,3 +385,18 @@
 **Decision:** Migration `006_add_finding_reviews.py` adds a `finding_reviews` table keyed by `(workflow_id, finding_id)` storing `status` (`unreviewed | confirmed | dismissed | needs_review`), `reviewer_note`, `updated_by_user_id`, and an append-only `history` JSON list of `{previous_status, new_status, note, user_id, user_email, at}`.
 **Rationale:** Persisting review decisions separately from `WorkflowRun.result` preserves immutable workflow output while maintaining an auditable trail of human review changes across sessions and exported HTML/Markdown reports.
 **Consequence:** Reviewers can update decisions and notes without mutating the underlying verified AI output.
+
+### D-050: Neo4j is an optional citation graph backend with `citation_links` DB fallback
+
+**Date:** Stage 9
+**Decision:** `app/services/citation_graph.py` provides `CitationGraphProvider` with `Neo4jCitationGraphProvider` (active only when `NEO4J_URI` is set) and `DatabaseCitationGraphProvider` backed by the `citation_links` table (migration `007`). Any Neo4j driver/connection failure logs a warning and returns empty results instead of raising.
+**Rationale:** Core precedent discovery and citation exploration must work out-of-the-box in local dev and standard PostgreSQL/SQLite deployments without requiring a separate graph database service.
+**Consequence:** Unresolved citations are persisted explicitly with `is_resolved=False` and `to_record_id=None`, never invented.
+
+### D-051: Precedent Explorer enforces corpus provenance and `is_fixture` labelling
+
+**Date:** Stage 9
+**Decision:** Every authority in `PrecedentResult` carries `source_provider`, `is_fixture`, and `verified_ref` checked deterministically by `precedent_verifier.py` against `Sn` (case sources) and `Rn` (retrieved legal records). Subsequent judicial treatment is marked unavailable unless supplied by a configured corpus.
+**Rationale:** Prevents hallucinated citations, fabricated holdings, or ungrounded claims of binding/overruled status.
+**Consequence:** Both API responses and the `/precedents` UI surface clear fixture warnings and separate verified metadata from model analytical notes.
+

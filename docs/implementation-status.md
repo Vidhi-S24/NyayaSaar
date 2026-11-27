@@ -1,10 +1,31 @@
 # NyayaSaar — Implementation Status
 
-> Updated: Stage 8 Contradiction & Gap Hunter complete
+> Updated: Stage 9 Precedent Explorer & Conflict Detector complete
 
 ---
 
 ## Completed stages
+
+### Stage 9 — Precedent Explorer & Conflict Detector ✅
+
+**Completed:** 2026-11-26
+*(See `stage-handoffs/stage-9.md` for full details, commands, and limitations)*
+
+**Scope:** Stage 9 **Precedent Explorer & Conflict Detector only**. Advocate Mode and Judge/Clerk Mode remain Stage 10 work.
+
+#### What was built
+
+| Path | Description |
+|---|---|
+| `apps/api/alembic/versions/007_add_citation_links.py`, `apps/api/app/db/models/citation.py` | Migration `007` and `CitationLink` model storing resolved and unresolved citation edges with provenance |
+| `apps/api/app/services/citation_graph.py` | Optional `Neo4jCitationGraphProvider` with graceful `DatabaseCitationGraphProvider` (`citation_links`) fallback |
+| `apps/api/app/agents/schemas_precedent.py`, `apps/api/app/ai/prompts/precedent_v9.py` | Stage 9 draft/verified schemas (`9.0.0`) with `is_fixture` / `source_provider` provenance and anti-fabrication rules |
+| `apps/api/app/agents/nodes/precedent_{analyst_v9,verifier}.py`, `apps/api/app/agents/graph_precedent.py` | Bounded LangGraph precedent workflow verifying `Sn` document refs and `Rn` retrieved-record refs |
+| `apps/api/app/services/analysis.py`, `routers/analysis.py`, `schemas/analysis.py`, `services/report_precedent.py` | `precedent` workflow dispatch, `GET .../citations` endpoint, and HTML/Markdown precedent report export |
+| `packages/shared/src/index.ts`, `apps/web/src/lib/api/analysis.ts`, `apps/web/src/components/precedents/precedent-panel.tsx`, `apps/web/src/app/(app)/precedents/` | `/precedents` Precedent Explorer UI with corpus search, filters, authority cards, SVG citation graph, conflict comparison, and empty states |
+| `apps/api/tests/test_precedent_explorer.py` | Deterministic prompt, verifier, mock-graph, insufficient-sources, HTML-escaping, and Neo4j-fallback tests |
+
+---
 
 ### Stage 8 — Contradiction & Gap Hunter ✅
 

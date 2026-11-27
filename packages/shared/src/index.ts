@@ -668,3 +668,95 @@ export interface FindingReview {
 export interface FindingReviewListResponse {
   items: FindingReview[];
 }
+
+// ---------------------------------------------------------------------------
+// Stage 9 — Precedent Explorer & Conflict Detector
+// ---------------------------------------------------------------------------
+
+export type CitationRelationship =
+  | "cites"
+  | "cited_by"
+  | "related_issue"
+  | "potentially_conflicting";
+
+export type PrecedentConfidence = "high" | "medium" | "low";
+
+export interface PrecedentAuthority {
+  authority_id: string;
+  citation_text: string;
+  title: string;
+  court: string;
+  jurisdiction: string;
+  decision_date: string;
+  holding_summary: string;
+  source_id: string;
+  source_provider: string;
+  is_fixture: boolean;
+  relevance_note: string;
+  verified_ref: AnalysisSourceRef | null;
+  support: AnalysisSupport;
+}
+
+export interface PrecedentCitationPair {
+  from_citation: string;
+  to_citation: string;
+  relationship_type: CitationRelationship;
+  supporting_passage: string;
+  confidence: PrecedentConfidence;
+  verified_ref: AnalysisSourceRef | null;
+  support: AnalysisSupport;
+}
+
+export interface PrecedentConflict {
+  title: string;
+  interpretation_a: string;
+  interpretation_b: string;
+  source_a_verified: AnalysisSourceRef | null;
+  source_b_verified: AnalysisSourceRef | null;
+  model_note: string;
+  support: AnalysisSupport;
+}
+
+export interface PrecedentResult {
+  workflow_id: string;
+  case_id: string;
+  generated_at: string;
+  provider: string;
+  model: string;
+  is_mock: boolean;
+  workflow_version: string;
+  prompt_version: string;
+  result_schema_version: string;
+  corpus_configured: boolean;
+  insufficient_sources: boolean;
+  query_used: string;
+  authorities: PrecedentAuthority[];
+  citation_pairs: PrecedentCitationPair[];
+  potential_conflicts: PrecedentConflict[];
+  summary: string;
+  limitations: string[];
+  verification: AnalysisVerificationSummary;
+  source_manifest: AnalysisSourceManifestEntry[];
+  source_stats: AnalysisSourceStats;
+  professional_review_required: boolean;
+  input_metadata: Record<string, unknown>;
+}
+
+export interface CitationLink {
+  id: string;
+  from_record_id: string;
+  to_record_id: string | null;
+  to_citation_text: string;
+  relationship_type: CitationRelationship;
+  source_passage: string | null;
+  source_provider: string;
+  is_resolved: boolean;
+  confidence: PrecedentConfidence;
+  workflow_id: string | null;
+  created_at: string;
+}
+
+export interface CitationLinkListResponse {
+  items: CitationLink[];
+  total: number;
+}

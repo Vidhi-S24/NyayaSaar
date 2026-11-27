@@ -22,6 +22,7 @@ from sqlalchemy.orm import sessionmaker
 from app.agents.context import WorkflowContext
 from app.agents.graph import run_case_analysis_graph
 from app.agents.graph_contradiction import run_contradiction_graph
+from app.agents.graph_precedent import run_precedent_graph
 from app.agents.schemas import (
     CASE_INTELLIGENCE_PROMPT_VERSION,
     CASE_INTELLIGENCE_RESULT_SCHEMA_VERSION,
@@ -31,6 +32,11 @@ from app.agents.schemas_contradiction import (
     CONTRADICTION_PROMPT_VERSION,
     CONTRADICTION_RESULT_SCHEMA_VERSION,
     CONTRADICTION_WORKFLOW_VERSION,
+)
+from app.agents.schemas_precedent import (
+    PRECEDENT_PROMPT_VERSION,
+    PRECEDENT_RESULT_SCHEMA_VERSION,
+    PRECEDENT_WORKFLOW_VERSION,
 )
 from app.agents.state import CaseAnalysisState
 from app.agents.tools.sources import load_case_sources
@@ -304,7 +310,7 @@ class WorkflowRunner:
         run.progress = 5
         run.current_step = "starting"
         wtype = run.workflow_type or "case_analysis"
-        if wtype not in ("case_analysis", "contradiction"):
+        if wtype not in ("case_analysis", "contradiction", "precedent"):
             await self._fail(
                 db,
                 run,
@@ -316,6 +322,10 @@ class WorkflowRunner:
             run.workflow_version = CONTRADICTION_WORKFLOW_VERSION
             run.prompt_version = CONTRADICTION_PROMPT_VERSION
             run.result_schema_version = CONTRADICTION_RESULT_SCHEMA_VERSION
+        elif wtype == "precedent":
+            run.workflow_version = PRECEDENT_WORKFLOW_VERSION
+            run.prompt_version = PRECEDENT_PROMPT_VERSION
+            run.result_schema_version = PRECEDENT_RESULT_SCHEMA_VERSION
         else:
             run.workflow_version = CASE_INTELLIGENCE_WORKFLOW_VERSION
             run.prompt_version = CASE_INTELLIGENCE_PROMPT_VERSION
@@ -442,7 +452,7 @@ class WorkflowRunner:
             max_verifier_retries=settings.agent_max_verifier_retries,
         )
 
-        if wtype == "contradiction" and sources:
+        if wtype in ("contradiction", "precedent") and sources:
             query_text = (payload.get("focus") or case.title or "").strip()
             if query_text:
                 try:
@@ -469,13 +479,40 @@ class WorkflowRunner:
                         for h in hits
                     ]
                 except Exception:
-                    logger.debug("Optional hybrid pre-retrieval skipped for contradiction run")
+                    logger.debug("Optional hybrid pre-retrieval skipped for %s run", wtype)
 
-        graph_fn = (
-            run_contradiction_graph
-            if wtype == "contradiction"
-            else run_case_analysis_graph
-        )
+        # For precedent runs: also retrieve legal records from the corpus.
+        if wtype == "precedent":
+            try:
+                from app.services.legal_corpus import get_legal_corpus_provider
+                corpus = get_legal_corpus_provider(settings)
+                query_text = (payload.get("focus") or case.title or "").strip()
+                if query_text:
+                    records = await corpus.search_records(query_text, limit=12)
+                    case_context["retrieved_records"] = [
+                        {
+                            "id": r.authority_id,
+                            "title": r.title,
+                            "citation": r.citation,
+                            "court": r.court,
+                            "jurisdiction": r.jurisdiction,
+                            "year": r.year,
+                            "decision_date": r.decision_date,
+                            "summary": r.holding_summary,
+                            "source_provider": r.source_provider,
+                            "is_fixture": r.is_fixture,
+                        }
+                        for r in records
+                    ]
+            except Exception:
+                logger.debug("Optional legal corpus retrieval skipped for precedent run")
+
+        if wtype == "precedent":
+            graph_fn = run_precedent_graph
+        elif wtype == "contradiction":
+            graph_fn = run_contradiction_graph
+        else:
+            graph_fn = run_case_analysis_graph
 
         try:
             final_state = await asyncio.wait_for(
@@ -561,6 +598,76 @@ class WorkflowRunner:
         run.steps = steps[-40:]
         await db.commit()
 
+        if wtype == "precedent" and isinstance(result, dict):
+            try:
+                await self._persist_precedent_citations(
+                    db, run, result, case_context.get("retrieved_records") or [], settings
+                )
+            except Exception:
+                logger.debug("Optional citation link persistence skipped for workflow=%s", run.id)
+
+    async def _persist_precedent_citations(
+        self,
+        db: AsyncSession,
+        run: WorkflowRun,
+        result: dict[str, Any],
+        retrieved_records: list[dict[str, Any]],
+        settings: Settings,
+    ) -> None:
+        """Persist evidence-backed citation pairs to citation_links / Neo4j when records exist."""
+        from app.db.models.legal_record import LegalRecord
+        from app.services.citation_graph import get_citation_graph_provider
+
+        pairs = result.get("citation_pairs") or []
+        if not pairs:
+            return
+
+        # Only DB-backed LegalRecord IDs can satisfy citation_links.from_record_id FK.
+        rec_ids = [str(r.get("id", "")) for r in retrieved_records if r.get("id")]
+        existing_ids: set[str] = set()
+        citation_to_id: dict[str, str] = {}
+        if rec_ids:
+            res = await db.execute(
+                select(LegalRecord.id, LegalRecord.citation).where(
+                    LegalRecord.id.in_(rec_ids)
+                )
+            )
+            for rid, cit in res.all():
+                existing_ids.add(rid)
+                if cit:
+                    citation_to_id[cit.casefold()] = rid
+
+        db_pairs: list[dict[str, Any]] = []
+        for pair in pairs:
+            vref = pair.get("verified_ref") or {}
+            from_id = str(vref.get("document_id") or "")
+            if from_id not in existing_ids:
+                from_cit = str(pair.get("from_citation") or "").casefold()
+                from_id = citation_to_id.get(from_cit, "")
+            if from_id not in existing_ids:
+                continue
+            to_cit = str(pair.get("to_citation") or "")
+            to_id = citation_to_id.get(to_cit.casefold())
+            db_pairs.append(
+                {
+                    "from_record_id": from_id,
+                    "to_record_id": to_id,
+                    "to_citation_text": to_cit or "[unresolved citation]",
+                    "relationship_type": pair.get("relationship_type", "cites"),
+                    "source_passage": pair.get("supporting_passage") or None,
+                    "source_provider": "precedent_explorer",
+                    "confidence": pair.get("confidence", "medium"),
+                    "workflow_id": run.id,
+                    "metadata_json": {"is_resolved": to_id is not None},
+                }
+            )
+
+        if not db_pairs:
+            return
+
+        provider = get_citation_graph_provider(settings, self._session_factory)
+        await provider.store_citations(db_pairs)
+
     async def _fail(
         self,
         db: AsyncSession,
@@ -586,6 +693,14 @@ class WorkflowRunner:
         )
         run.steps = steps[-40:]
         await db.commit()
+
+        if wtype == "precedent" and isinstance(result, dict):
+            try:
+                await self._persist_precedent_citations(
+                    db, run, result, case_context.get("retrieved_records") or [], settings
+                )
+            except Exception:
+                logger.debug("Optional citation link persistence skipped for workflow=%s", run.id)
 
     async def _mark_failed_best_effort(
         self, workflow_id: str, code: str, message: str
@@ -745,3 +860,27 @@ async def upsert_finding_review(
     await db.flush()
     await db.refresh(existing)
     return existing
+
+
+async def list_citations_for_run(
+    db: AsyncSession,
+    *,
+    case_id: str,
+    workflow_id: str,
+    user_id: str,
+) -> list[Any] | None:
+    """Return CitationLink rows associated with an owned workflow run."""
+    from app.db.models.citation import CitationLink
+
+    run = await get_workflow_run(
+        db, workflow_id=workflow_id, user_id=user_id, case_id=case_id
+    )
+    if run is None:
+        return None
+    res = await db.execute(
+        select(CitationLink)
+        .where(CitationLink.workflow_id == workflow_id)
+        .order_by(CitationLink.created_at.desc())
+        .limit(100)
+    )
+    return list(res.scalars().all())

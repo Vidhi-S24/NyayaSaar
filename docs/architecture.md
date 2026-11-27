@@ -529,5 +529,6 @@ See [decisions.md](decisions.md) for the rationale behind technology choices.
 | 6 ✅ | Legal analysis | Case Intelligence module: dual-specialist graph, chronology, span verification, version metadata, report export |
 | 7 ✅ | Hybrid retrieval | `pgvector` + FTS + RRF hybrid retrieval, `EmbeddingProvider`, `LegalCorpusProvider`, Legal Research UI |
 | 8 ✅ | Contradiction & Gap Hunter | Cross-document contradiction workflow, deterministic verifier, `finding_reviews` audit trail, `/contradictions` workspace |
-| 9+ | Future stages | Precedent Explorer, Advocate Mode, Judge/Clerk Mode, evaluation & CI |
+| 9 ✅ | Precedent Explorer & Conflict Detector | `citation_links` migration `007`, optional Neo4j + DB fallback, `precedent` LangGraph workflow, `/precedents` UI |
+| 10+ | Future stages | Advocate Mode, Judge/Clerk Mode, evaluation & CI |
 
