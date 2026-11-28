@@ -1535,7 +1535,7 @@ export function AnalysisPanel({
           )}
           {run?.result && (
             <ResultView
-              result={run.result}
+              result={run.result as CaseAnalysisResult}
               onOpenSource={setSource}
               onExport={handleExport}
               exporting={exporting}

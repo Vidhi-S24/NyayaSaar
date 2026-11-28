@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, StringConstraints, field_validator
 from app.agents.schemas import CaseAnalysisResult
 from app.agents.schemas_contradiction import ContradictionResult, ReviewStatus
 from app.agents.schemas_precedent import PrecedentResult
+from app.agents.schemas_stage10 import AdvocateResult, JudgeResult
 
 if TYPE_CHECKING:
     from app.db.models.workflow import WorkflowRun as WorkflowRunModel
@@ -20,9 +21,17 @@ DocumentId = Annotated[str, StringConstraints(min_length=1, max_length=36)]
 class CaseAnalysisRequest(BaseModel):
     """Optional analysis inputs. Empty body = analyse all ready documents."""
 
-    workflow_type: Literal["case_analysis", "contradiction", "precedent"] = Field(
+    workflow_type: Literal[
+        "case_analysis", "contradiction", "precedent", "advocate", "judge"
+    ] = Field(
         default="case_analysis",
-        description="Workflow to execute: case_analysis | contradiction | precedent.",
+        description=(
+            "Workflow to execute: case_analysis | contradiction | precedent | advocate | judge."
+        ),
+    )
+    preferred_side: Literal["both", "claimant", "respondent"] = Field(
+        default="both",
+        description="Optional side focus for Advocate Mode (never suppresses contrary evidence).",
     )
     document_ids: list[DocumentId] | None = Field(
         default=None,
@@ -71,7 +80,15 @@ class WorkflowRunResponse(BaseModel):
     result_schema_version: str | None = None
     document_ids: list[str] = Field(default_factory=list)
     focus: str | None = None
-    result: CaseAnalysisResult | ContradictionResult | PrecedentResult | dict[str, Any] | None = None
+    result: (
+        CaseAnalysisResult
+        | ContradictionResult
+        | PrecedentResult
+        | AdvocateResult
+        | JudgeResult
+        | dict[str, Any]
+        | None
+    ) = None
     steps: list[WorkflowStepResponse] = Field(default_factory=list)
     token_usage: dict[str, Any] = Field(default_factory=dict)
     error: WorkflowErrorResponse | None = None

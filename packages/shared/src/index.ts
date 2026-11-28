@@ -414,7 +414,13 @@ export interface WorkflowRun {
   result_schema_version: string | null;
   document_ids: string[];
   focus: string | null;
-  result: CaseAnalysisResult | null;
+  result:
+    | CaseAnalysisResult
+    | ContradictionResult
+    | PrecedentResult
+    | AdvocateResult
+    | JudgeResult
+    | null;
   steps: WorkflowStep[];
   token_usage: Record<string, number>;
   error: WorkflowError | null;
@@ -760,3 +766,117 @@ export interface CitationLinkListResponse {
   items: CitationLink[];
   total: number;
 }
+
+// ---------------------------------------------------------------------------
+// Stage 10 — Advocate Mode & Judge/Clerk Mode
+// ---------------------------------------------------------------------------
+
+export type AdvocateSide = "claimant" | "respondent";
+export type AdvocatePreferredSide = "both" | AdvocateSide;
+export type AdvocateArgumentTier =
+  | "strong_supported"
+  | "moderate_supported"
+  | "speculative";
+export type AdvocateStrength = "high" | "medium" | "low";
+
+export interface AdvocateArgument {
+  argument_id: string;
+  side: AdvocateSide;
+  issue: string;
+  claim: string;
+  reasoning: string;
+  tier: AdvocateArgumentTier;
+  strength: AdvocateStrength;
+  supporting_sources: AnalysisSourceRef[];
+  opposing_sources: AnalysisSourceRef[];
+  authority_refs: string[];
+  counterarguments: string[];
+  evidentiary_gap: boolean;
+  gap_description: string;
+  support: AnalysisSupport;
+}
+
+export interface AdvocateEvidentiaryGap {
+  description: string;
+  missing_evidence_type: string;
+  affected_claim: string;
+  source_refs: AnalysisSourceRef[];
+}
+
+export interface AdvocateResult {
+  workflow_id: string;
+  case_id: string;
+  generated_at: string;
+  provider: string;
+  model: string;
+  is_mock: boolean;
+  workflow_version: string;
+  prompt_version: string;
+  result_schema_version: string;
+  insufficient_sources: boolean;
+  preferred_side: AdvocatePreferredSide;
+  selected_issue: string;
+  summary: string;
+  relevant_facts: string[];
+  claimant_arguments: AdvocateArgument[];
+  respondent_arguments: AdvocateArgument[];
+  evidentiary_gaps: AdvocateEvidentiaryGap[];
+  unresolved_questions: string[];
+  strengths: string[];
+  weaknesses: string[];
+  verification: AnalysisVerificationSummary;
+  source_manifest: AnalysisSourceManifestEntry[];
+  source_stats: AnalysisSourceStats;
+  limitations: string[];
+  professional_review_required: boolean;
+  research_tool_disclaimer: string;
+  input_metadata: Record<string, unknown>;
+}
+
+export type JudgeAuditStatus =
+  | "covered"
+  | "partially_covered"
+  | "unsupported"
+  | "inconsistent"
+  | "missing_citation"
+  | "unresolved";
+
+export interface JudgeAuditItem {
+  audit_id: string;
+  item: string;
+  finding: string;
+  status: JudgeAuditStatus;
+  severity: "high" | "medium" | "low";
+  opposing_considered: boolean | null;
+  source_refs: AnalysisSourceRef[];
+  support: AnalysisSupport;
+}
+
+export interface JudgeResult {
+  workflow_id: string;
+  case_id: string;
+  generated_at: string;
+  provider: string;
+  model: string;
+  is_mock: boolean;
+  workflow_version: string;
+  prompt_version: string;
+  result_schema_version: string;
+  insufficient_sources: boolean;
+  summary: string;
+  issue_coverage: JudgeAuditItem[];
+  reasoning_consistency: JudgeAuditItem[];
+  source_support_audit: JudgeAuditItem[];
+  citation_integrity: JudgeAuditItem[];
+  opposing_consideration_audit: JudgeAuditItem[];
+  unresolved_questions: JudgeAuditItem[];
+  overall_assessment: string;
+  verification: AnalysisVerificationSummary;
+  source_manifest: AnalysisSourceManifestEntry[];
+  source_stats: AnalysisSourceStats;
+  limitations: string[];
+  professional_review_required: boolean;
+  judicial_audit_disclaimer: string;
+  input_metadata: Record<string, unknown>;
+}
+

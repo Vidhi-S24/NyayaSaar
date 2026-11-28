@@ -217,8 +217,8 @@ export default function DashboardPage() {
             { href: "/research", label: "Legal Research", desc: "Hybrid lexical & semantic search", stage: "Live" },
             { href: "/contradictions", label: "Contradiction & Gap", desc: "Detect conflicts, missing evidence", stage: "Live" },
             { href: "/precedents", label: "Precedent Explorer", desc: "Search legal authorities", stage: "Live" },
-            { href: "/advocate", label: "Advocate Mode", desc: "Build opposing arguments", stage: "Stage 10" },
-            { href: "/judge", label: "Judge / Clerk", desc: "Audit reasoning and coverage", stage: "Stage 10" },
+            { href: "/advocate", label: "Advocate Mode", desc: "Build opposing arguments", stage: "Live" },
+            { href: "/judge", label: "Judge / Clerk", desc: "Audit reasoning and coverage", stage: "Live" },
           ].map((mod) => (
             <Link
               key={mod.href}

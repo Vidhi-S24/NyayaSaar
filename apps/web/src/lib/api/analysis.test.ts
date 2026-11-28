@@ -3,7 +3,11 @@ import {
   getAIStatus,
   getCaseAnalysis,
   isWorkflowActive,
+  listAdvocateAnalyses,
+  listJudgeAnalyses,
+  startAdvocateAnalysis,
   startCaseAnalysis,
+  startJudgeAnalysis,
   supportLabel,
   verificationRate,
   workflowStatusLabel,
@@ -149,6 +153,71 @@ describe("analysis API wrappers", () => {
 
     expect(envelope.data?.is_mock).toBe(true);
     expect(JSON.stringify(envelope.data)).not.toContain("api_key");
+  });
+
+  it("starts Advocate Mode with the selected side and document scope", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(202, {
+        success: true,
+        data: {
+          id: "wf-adv",
+          case_id: "case-1",
+          workflow_type: "advocate",
+          status: "queued",
+          progress: 0,
+        },
+      }),
+    );
+
+    const envelope = await startAdvocateAnalysis("case-1", {
+      document_ids: ["doc-1"],
+      focus: "limitation",
+      preferred_side: "respondent",
+    });
+
+    expect(envelope.data?.workflow_type).toBe("advocate");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain("/api/v1/cases/case-1/analysis");
+    expect(JSON.parse(init.body)).toEqual({
+      document_ids: ["doc-1"],
+      focus: "limitation",
+      preferred_side: "respondent",
+      workflow_type: "advocate",
+    });
+  });
+
+  it("starts Judge/Clerk Mode and lists runs by workflow type", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(202, {
+        success: true,
+        data: {
+          id: "wf-judge",
+          case_id: "case-1",
+          workflow_type: "judge",
+          status: "queued",
+          progress: 0,
+        },
+      }),
+    );
+
+    const started = await startJudgeAnalysis("case-1", { focus: "citations" });
+    expect(started.data?.workflow_type).toBe("judge");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      focus: "citations",
+      workflow_type: "judge",
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, { success: true, data: { items: [], total: 0 } }),
+    );
+    await listJudgeAnalyses("case-1");
+    expect(fetchMock.mock.calls[1][0]).toContain("workflow_type=judge");
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, { success: true, data: { items: [], total: 0 } }),
+    );
+    await listAdvocateAnalyses("case-1");
+    expect(fetchMock.mock.calls[2][0]).toContain("workflow_type=advocate");
   });
 });
 

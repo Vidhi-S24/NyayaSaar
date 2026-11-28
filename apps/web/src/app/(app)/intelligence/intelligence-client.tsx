@@ -71,11 +71,10 @@ export function IntelligenceClient({
       />
 
       <div className="rounded-md border border-teal-200 bg-teal-50 px-3.5 py-3 text-xs text-teal-900">
-        <strong>Stage 6 Case Intelligence is live.</strong> It reads only the selected
+        <strong>Case Intelligence is live.</strong> It reads only the selected
         case&apos;s ready documents, preserves document IDs and page numbers, and flags
         anything the verifier could not support. Legal Research, Contradiction &amp; Gap
-        Hunter, and Precedent Explorer are also live; Advocate Mode and Judge/Clerk Mode
-        are planned for Stage 10.
+        Hunter, Precedent Explorer, Advocate Mode, and Judge/Clerk Mode are also live.
       </div>
 
       {casesQuery.isLoading && (

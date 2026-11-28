@@ -42,9 +42,11 @@ def slugify_filename(value: str, *, max_length: int = 48) -> str:
     return cleaned[:max_length].rstrip("-")
 
 
-def report_filename(case: Case, run: WorkflowRun, extension: str) -> str:
+def report_filename(
+    case: Case, run: WorkflowRun, extension: str, kind: str = "case-intelligence"
+) -> str:
     return (
-        f"nyayasaar-case-intelligence-{slugify_filename(case.title)}-"
+        f"nyayasaar-{slugify_filename(kind)}-{slugify_filename(case.title)}-"
         f"{run.id[:8]}.{extension}"
     )
 

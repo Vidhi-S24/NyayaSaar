@@ -13,7 +13,9 @@ import type {
 
 export function startCaseAnalysis(
   caseId: string,
-  input: CaseAnalysisRequest & { workflow_type?: "case_analysis" | "contradiction" | "precedent" } = {},
+  input: CaseAnalysisRequest & {
+    workflow_type?: "case_analysis" | "contradiction" | "precedent" | "advocate" | "judge";
+  } = {},
 ) {
   return apiClient.post<WorkflowRun>(
     `/api/v1/cases/${caseId}/analysis`,
@@ -24,7 +26,12 @@ export function startCaseAnalysis(
 export function listCaseAnalyses(
   caseId: string,
   limit = 20,
-  workflowType: "case_analysis" | "contradiction" | "precedent" = "case_analysis",
+  workflowType:
+    | "case_analysis"
+    | "contradiction"
+    | "precedent"
+    | "advocate"
+    | "judge" = "case_analysis",
 ) {
   return apiClient.get<WorkflowRunListResponse>(
     `/api/v1/cases/${caseId}/analysis`,
@@ -183,3 +190,48 @@ export function listCitationsForRun(caseId: string, workflowId: string) {
     `/api/v1/cases/${caseId}/analysis/${workflowId}/citations`,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Stage 10 — Advocate Mode & Judge/Clerk Mode
+// ---------------------------------------------------------------------------
+
+export type Stage10Mode = "advocate" | "judge";
+
+export function startAdvocateAnalysis(
+  caseId: string,
+  input: {
+    document_ids?: string[];
+    focus?: string;
+    preferred_side?: "both" | "claimant" | "respondent";
+  } = {},
+) {
+  return apiClient.post<WorkflowRun>(
+    `/api/v1/cases/${caseId}/analysis`,
+    { ...input, workflow_type: "advocate" },
+  );
+}
+
+export function listAdvocateAnalyses(caseId: string, limit = 20) {
+  return apiClient.get<WorkflowRunListResponse>(
+    `/api/v1/cases/${caseId}/analysis`,
+    { params: { limit, workflow_type: "advocate" } },
+  );
+}
+
+export function startJudgeAnalysis(
+  caseId: string,
+  input: { document_ids?: string[]; focus?: string } = {},
+) {
+  return apiClient.post<WorkflowRun>(
+    `/api/v1/cases/${caseId}/analysis`,
+    { ...input, workflow_type: "judge" },
+  );
+}
+
+export function listJudgeAnalyses(caseId: string, limit = 20) {
+  return apiClient.get<WorkflowRunListResponse>(
+    `/api/v1/cases/${caseId}/analysis`,
+    { params: { limit, workflow_type: "judge" } },
+  );
+}
+

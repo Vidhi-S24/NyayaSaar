@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.schemas import CaseAnalysisResult
 from app.agents.schemas_contradiction import ContradictionResult
 from app.agents.schemas_precedent import PrecedentResult
+from app.agents.schemas_stage10 import AdvocateResult, JudgeResult
 from app.config import get_settings
 from app.db.models.user import User
 from app.db.session import get_async_session
@@ -41,6 +42,7 @@ from app.schemas.analysis import (
 )
 from app.services import analysis as analysis_service
 from app.services import report as report_service
+from app.services import report_stage10 as report_stage10_service
 from app.services.auth import get_current_user
 
 logger = logging.getLogger("nyayasaar.routers.analysis")
@@ -299,6 +301,72 @@ async def download_report(
             )
         body = report_service.render_precedent_report_html(case, run, p_result)
         filename = report_service.report_filename(case, run, "html")
+        return HTMLResponse(
+            content=body,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "private, no-store",
+                "Content-Security-Policy": (
+                    "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+                ),
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    if run.workflow_type == "advocate":
+        try:
+            a_result = AdvocateResult.model_validate(run.result)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="The stored advocate analysis could not be read.",
+            )
+        if format == "markdown":
+            body = report_stage10_service.render_advocate_report_markdown(case, run, a_result)
+            filename = report_service.report_filename(case, run, "md", "advocate")
+            return PlainTextResponse(
+                content=body,
+                media_type="text/markdown; charset=utf-8",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Cache-Control": "private, no-store",
+                },
+            )
+        body = report_stage10_service.render_advocate_report_html(case, run, a_result)
+        filename = report_service.report_filename(case, run, "html", "advocate")
+        return HTMLResponse(
+            content=body,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "private, no-store",
+                "Content-Security-Policy": (
+                    "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+                ),
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    if run.workflow_type == "judge":
+        try:
+            j_result = JudgeResult.model_validate(run.result)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="The stored judge/clerk audit could not be read.",
+            )
+        if format == "markdown":
+            body = report_stage10_service.render_judge_report_markdown(case, run, j_result)
+            filename = report_service.report_filename(case, run, "md", "judge-audit")
+            return PlainTextResponse(
+                content=body,
+                media_type="text/markdown; charset=utf-8",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Cache-Control": "private, no-store",
+                },
+            )
+        body = report_stage10_service.render_judge_report_html(case, run, j_result)
+        filename = report_service.report_filename(case, run, "html", "judge-audit")
         return HTMLResponse(
             content=body,
             headers={

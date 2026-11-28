@@ -252,14 +252,54 @@ Neither format calls a model; both render only the persisted verified result.
 
 - Hybrid retrieval (full-text + embeddings), contradiction/gap detection.
 - Precedent Explorer, authority corpus, provenance checks, precedent graphs.
-- Advocate Mode and Judge/Clerk Mode.
 - Durable queue/worker and cross-restart LangGraph checkpoint resume.
 - Server-side PDF generation (HTML print view is provided instead).
 - Real-provider smoke tests in CI (requires a key and network access).
 
 ---
 
-## Stage 5 — Provider-agnostic AI and LangGraph case analysis
+## Stage 10 — Advocate Mode & Judge/Clerk Mode
+
+Both modes reuse the Stage 6 source planner, verified source references, verification
+summaries, source manifests, bounded budgets, and the in-process `workflow_runs`
+runner. They add one specialist model call and one deterministic verifier each.
+
+### Graph topology (`apps/api/app/agents/graph_stage10.py`)
+
+```
+START → orchestrator
+orchestrator ─┬─(insufficient sources)──────────────→ finalize
+              └─→ advocate_analyst | judge_analyst
+analyst ─┬─(provider error / budget)─────────────────→ finalize
+         └─→ advocate_verifier | judge_verifier
+verifier ─┬─(unknown Sn/Rn marker, retry budget)─────→ analyst
+          └─(verified or budget exhausted)───────────→ finalize
+finalize → END
+```
+
+| Mode | Workflow type | Analyst output | Deterministic checks |
+|---|---|---|---|
+| Advocate | `advocate` | Two-sided arguments, counterarguments, evidence gaps, unresolved questions | Verifies `Sn`/`Rn` refs and verbatim quotes; drops unknown authority strings; downgrades ungrounded arguments to `speculative`; adds mandatory limitations |
+| Judge/Clerk | `judge` | Six audit dimensions, opposing-consideration flags, unresolved questions, overall assessment | Verifies `Sn`/`Rn` refs and quotes; records category support counts; adds mandatory non-judicial limitations |
+
+### API and reporting
+
+```
+POST /api/v1/cases/{case_id}/analysis
+     { workflow_type: "advocate" | "judge", document_ids?, focus?, preferred_side? }
+GET  /api/v1/cases/{case_id}/analysis?workflow_type=advocate|judge
+GET  /api/v1/cases/{case_id}/analysis/{workflow_id}
+GET  /api/v1/cases/{case_id}/analysis/{workflow_id}/report?format=html|markdown
+```
+
+`preferred_side` only deepens one side in Advocate Mode. The schema and UI always
+retain both sides, contrary source passages, counterarguments, and evidentiary gaps.
+Judge/Clerk output is labelled as a reasoning audit; it never issues a judgment or
+a view on who should win.
+
+---
+
+## Stage 5 - Provider-agnostic AI and LangGraph case analysis
 
 > **Historical:** this section describes the Stage 5 single-analyst graph. Stage 6
 > (above) supersedes its topology, state, and API surface while keeping the same
@@ -363,7 +403,6 @@ notes, and opens the exact cited document page in a source viewer.
 - Hybrid retrieval, embeddings/pgvector search, authority corpus, contradictions,
   precedent analysis, advocate/judge modules.
 - Real-provider smoke tests in CI (requires a key and network access).
-
 ---
 
 ## Stage 4 — Document ingestion pipeline

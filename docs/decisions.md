@@ -400,3 +400,17 @@
 **Rationale:** Prevents hallucinated citations, fabricated holdings, or ungrounded claims of binding/overruled status.
 **Consequence:** Both API responses and the `/precedents` UI surface clear fixture warnings and separate verified metadata from model analytical notes.
 
+### D-052: Advocate Mode `preferred_side` never suppresses contrary evidence or ungrounded tiers
+
+**Date:** Stage 10
+**Decision:** `CaseAnalysisRequest.preferred_side` (`both | claimant | respondent`) steers emphasis in `advocate_analyst`, but prompts require arguments for both sides and `stage10_verifier.py` deterministically downgrades any argument lacking verified supporting `Sn`/`Rn` passages to `tier="speculative"`, `strength="low"`, and `evidentiary_gap=True` (contrary-only material does not count as supporting evidence).
+**Rationale:** Legal research assistance must expose weaknesses and opposing material rather than generating one-sided advocacy that hides gaps.
+**Consequence:** Users can focus on a party's theory while always seeing counterarguments, evidentiary gaps, and verified vs. speculative distinctions.
+
+### D-053: Judge/Clerk Mode is a non-authoritative reasoning audit assistant
+
+**Date:** Stage 10
+**Decision:** `judge_analyst` and `stage10_verifier` produce structured findings across six audit categories (`issue_coverage`, `reasoning_consistency`, `source_support_audit`, `citation_integrity`, `opposing_consideration_audit`, `unresolved_questions`) with mandatory `judicial_audit_disclaimer` and `professional_review_required=True` enforced by the verifier and rendered prominently in `/judge` and exported reports.
+**Rationale:** NyayaSaar is a research and audit tool, never a simulated judicial authority or court decision.
+**Consequence:** Outputs highlight missing citations, unverified claims, and unresolved questions for human review without issuing rulings or binding determinations.
+

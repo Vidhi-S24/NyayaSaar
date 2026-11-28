@@ -23,6 +23,7 @@ from app.agents.context import WorkflowContext
 from app.agents.graph import run_case_analysis_graph
 from app.agents.graph_contradiction import run_contradiction_graph
 from app.agents.graph_precedent import run_precedent_graph
+from app.agents.graph_stage10 import run_advocate_graph, run_judge_graph
 from app.agents.schemas import (
     CASE_INTELLIGENCE_PROMPT_VERSION,
     CASE_INTELLIGENCE_RESULT_SCHEMA_VERSION,
@@ -37,6 +38,14 @@ from app.agents.schemas_precedent import (
     PRECEDENT_PROMPT_VERSION,
     PRECEDENT_RESULT_SCHEMA_VERSION,
     PRECEDENT_WORKFLOW_VERSION,
+)
+from app.agents.schemas_stage10 import (
+    ADVOCATE_PROMPT_VERSION,
+    ADVOCATE_RESULT_SCHEMA_VERSION,
+    ADVOCATE_WORKFLOW_VERSION,
+    JUDGE_PROMPT_VERSION,
+    JUDGE_RESULT_SCHEMA_VERSION,
+    JUDGE_WORKFLOW_VERSION,
 )
 from app.agents.state import CaseAnalysisState
 from app.agents.tools.sources import load_case_sources
@@ -145,7 +154,11 @@ async def create_workflow_run(
         workflow_type=workflow_type,
         status="queued",
         progress=0,
-        input_payload={"document_ids": document_ids, "focus": data.focus},
+        input_payload={
+            "document_ids": document_ids,
+            "focus": data.focus,
+            "preferred_side": data.preferred_side,
+        },
         steps=[],
         token_usage={},
         attempt_count=0,
@@ -310,7 +323,13 @@ class WorkflowRunner:
         run.progress = 5
         run.current_step = "starting"
         wtype = run.workflow_type or "case_analysis"
-        if wtype not in ("case_analysis", "contradiction", "precedent"):
+        if wtype not in (
+            "case_analysis",
+            "contradiction",
+            "precedent",
+            "advocate",
+            "judge",
+        ):
             await self._fail(
                 db,
                 run,
@@ -326,6 +345,14 @@ class WorkflowRunner:
             run.workflow_version = PRECEDENT_WORKFLOW_VERSION
             run.prompt_version = PRECEDENT_PROMPT_VERSION
             run.result_schema_version = PRECEDENT_RESULT_SCHEMA_VERSION
+        elif wtype == "advocate":
+            run.workflow_version = ADVOCATE_WORKFLOW_VERSION
+            run.prompt_version = ADVOCATE_PROMPT_VERSION
+            run.result_schema_version = ADVOCATE_RESULT_SCHEMA_VERSION
+        elif wtype == "judge":
+            run.workflow_version = JUDGE_WORKFLOW_VERSION
+            run.prompt_version = JUDGE_PROMPT_VERSION
+            run.result_schema_version = JUDGE_RESULT_SCHEMA_VERSION
         else:
             run.workflow_version = CASE_INTELLIGENCE_WORKFLOW_VERSION
             run.prompt_version = CASE_INTELLIGENCE_PROMPT_VERSION
@@ -393,6 +420,7 @@ class WorkflowRunner:
             "summary": case.summary,
             "issues": case.issues or [],
             "focus": payload.get("focus"),
+            "preferred_side": payload.get("preferred_side", "both"),
         }
 
         initial_state: CaseAnalysisState = {
@@ -452,7 +480,7 @@ class WorkflowRunner:
             max_verifier_retries=settings.agent_max_verifier_retries,
         )
 
-        if wtype in ("contradiction", "precedent") and sources:
+        if wtype in ("contradiction", "precedent", "advocate", "judge") and sources:
             query_text = (payload.get("focus") or case.title or "").strip()
             if query_text:
                 try:
@@ -481,8 +509,8 @@ class WorkflowRunner:
                 except Exception:
                     logger.debug("Optional hybrid pre-retrieval skipped for %s run", wtype)
 
-        # For precedent runs: also retrieve legal records from the corpus.
-        if wtype == "precedent":
+        # For precedent, advocate, and judge runs: also retrieve legal records from the corpus.
+        if wtype in ("precedent", "advocate", "judge"):
             try:
                 from app.services.legal_corpus import get_legal_corpus_provider
                 corpus = get_legal_corpus_provider(settings)
@@ -505,12 +533,16 @@ class WorkflowRunner:
                         for r in records
                     ]
             except Exception:
-                logger.debug("Optional legal corpus retrieval skipped for precedent run")
+                logger.debug("Optional legal corpus retrieval skipped for %s run", wtype)
 
         if wtype == "precedent":
             graph_fn = run_precedent_graph
         elif wtype == "contradiction":
             graph_fn = run_contradiction_graph
+        elif wtype == "advocate":
+            graph_fn = run_advocate_graph
+        elif wtype == "judge":
+            graph_fn = run_judge_graph
         else:
             graph_fn = run_case_analysis_graph
 

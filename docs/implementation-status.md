@@ -1,10 +1,31 @@
 # NyayaSaar — Implementation Status
 
-> Updated: Stage 9 Precedent Explorer & Conflict Detector complete
+> Updated: Stage 10 Advocate Mode & Judge/Clerk Mode complete
 
 ---
 
 ## Completed stages
+
+### Stage 10 — Advocate Mode & Judge/Clerk Mode ✅
+
+**Completed:** 2026-11-28
+*(See `stage-handoffs/stage-10.md` for full details, commands, and limitations)*
+
+**Scope:** Stage 10 **Advocate Mode & Judge/Clerk Mode**. Evaluation, security hardening, accessibility audit, and deployment remain Stage 11 work.
+
+#### What was built
+
+| Path | Description |
+|---|---|
+| `apps/api/app/agents/schemas_stage10.py` | Stage 10 draft and verified schemas (`10.0.0`) for `AdvocateDraft`/`AdvocateResult` (tiers: `strong_supported`, `moderate_supported`, `speculative`) and `JudgeDraft`/`JudgeResult` (6 audit dimensions + mandatory disclaimers) |
+| `apps/api/app/ai/prompts/advocate.py`, `apps/api/app/ai/prompts/judge.py` | Prompts with `<untrusted_document>` wrapping, `preferred_side` without suppressing contrary material, and non-authoritative reasoning-audit guardrails |
+| `apps/api/app/agents/nodes/advocate_analyst.py`, `judge_analyst.py`, `stage10_verifier.py` | Bounded analyst nodes + deterministic verifier validating `Sn` case sources and `Rn` corpus records, enforcing speculative tier on ungrounded claims, and triggering bounded revision |
+| `apps/api/app/agents/graph_stage10.py` | `run_advocate_graph()` and `run_judge_graph()` with `insufficient_sources` handling and provider error recovery |
+| `apps/api/app/services/analysis.py`, `routers/analysis.py`, `schemas/analysis.py`, `services/report_stage10.py`, `services/report.py` | `advocate` and `judge` workflow dispatch, `preferred_side` request support, and HTML-escaped/Markdown report export |
+| `packages/shared/src/index.ts`, `apps/web/src/lib/api/analysis.ts`, `apps/web/src/components/{advocate,judge,shared/mode-ui.tsx}`, `apps/web/src/app/(app)/{advocate,judge}/` | Live `/advocate` and `/judge` case-scoped workspaces with document/side/focus selectors, argument & counterargument cards, 6-category audit view, source provenance modal, disclaimers, and HTML/Markdown report downloads |
+| `apps/api/tests/test_stage10_modes.py`, `apps/web/src/lib/api/analysis.test.ts` | Deterministic verifier, graph error/insufficient-source, HTML-escaping, cross-user auth, and frontend helper tests |
+
+---
 
 ### Stage 9 — Precedent Explorer & Conflict Detector ✅
 

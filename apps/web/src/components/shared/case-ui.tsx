@@ -87,20 +87,4 @@ export function EmptyState({
   );
 }
 
-export function ComingSoonState({ feature }: { feature: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-      <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-secondary">
-        <span className="text-lg" aria-hidden="true">⚡</span>
-      </div>
-      <div>
-        <p className="text-sm font-medium text-foreground">{feature}</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          This module is planned for Stage 10. Case Intelligence, Legal Research,
-          Contradiction &amp; Gap Hunter, and Precedent Explorer are available now.
-        </p>
-      </div>
-    </div>
-  );
-}
 
