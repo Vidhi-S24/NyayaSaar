@@ -171,23 +171,23 @@ def test_contradiction_report_escapes_html_and_includes_reviews() -> None:
 
 @pytest.mark.asyncio
 async def test_contradiction_review_audit_trail_and_cross_user_auth(
-    test_client: AsyncClient,
+    client: AsyncClient,
 ) -> None:
-    r1 = await test_client.post(
+    r1 = await client.post(
         "/api/v1/auth/register",
         json={"email": "owner_s8@example.com", "password": "StrongPassword123!", "full_name": "Owner"},
     )
     assert r1.status_code == 201
     h1 = {"Authorization": f"Bearer {r1.json()['data']['access_token']}"}
 
-    r2 = await test_client.post(
+    r2 = await client.post(
         "/api/v1/auth/register",
         json={"email": "other_s8@example.com", "password": "StrongPassword123!", "full_name": "Other"},
     )
     assert r2.status_code == 201
     h2 = {"Authorization": f"Bearer {r2.json()['data']['access_token']}"}
 
-    c_resp = await test_client.post(
+    c_resp = await client.post(
         "/api/v1/cases",
         headers=h1,
         json={"title": "Stage 8 Test Case"},
@@ -195,7 +195,7 @@ async def test_contradiction_review_audit_trail_and_cross_user_auth(
     assert c_resp.status_code == 201
     case_id = c_resp.json()["data"]["id"]
 
-    a_resp = await test_client.post(
+    a_resp = await client.post(
         f"/api/v1/cases/{case_id}/analysis",
         headers=h1,
         json={"workflow_type": "contradiction"},
@@ -203,7 +203,7 @@ async def test_contradiction_review_audit_trail_and_cross_user_auth(
     assert a_resp.status_code == 202
     wf_id = a_resp.json()["data"]["id"]
 
-    cross = await test_client.get(
+    cross = await client.get(
         f"/api/v1/cases/{case_id}/analysis/{wf_id}/reviews",
         headers=h2,
     )

@@ -90,7 +90,7 @@ export default function DashboardPage() {
           label="Contradictions Found"
           value="—"
           icon={<AlertTriangle className="h-4 w-4" />}
-          trend="Planned for Stage 8"
+          trend="Run analyses in Contradiction & Gap Hunter"
         />
       </div>
 
@@ -215,10 +215,10 @@ export default function DashboardPage() {
           {[
             { href: "/intelligence", label: "Case Intelligence", desc: "Run source-linked analysis", stage: "Live" },
             { href: "/research", label: "Legal Research", desc: "Hybrid lexical & semantic search", stage: "Live" },
-            { href: "/contradictions", label: "Contradiction & Gap", desc: "Detect conflicts, missing evidence", stage: "Stage 8" },
-            { href: "/precedents", label: "Precedent Explorer", desc: "Search legal authorities", stage: "Future stage" },
-            { href: "/advocate", label: "Advocate Mode", desc: "Build opposing arguments", stage: "Future stage" },
-            { href: "/judge", label: "Judge / Clerk", desc: "Audit reasoning and coverage", stage: "Future stage" },
+            { href: "/contradictions", label: "Contradiction & Gap", desc: "Detect conflicts, missing evidence", stage: "Live" },
+            { href: "/precedents", label: "Precedent Explorer", desc: "Search legal authorities", stage: "Live" },
+            { href: "/advocate", label: "Advocate Mode", desc: "Build opposing arguments", stage: "Stage 10" },
+            { href: "/judge", label: "Judge / Clerk", desc: "Audit reasoning and coverage", stage: "Stage 10" },
           ].map((mod) => (
             <Link
               key={mod.href}

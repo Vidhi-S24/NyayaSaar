@@ -62,3 +62,34 @@
 - `pnpm.cmd --filter web lint`: passed (`No ESLint warnings or errors`).
 - `pnpm.cmd --filter web test`: **5 test files, 30 tests passed**.
 - `pnpm.cmd --filter web build`: **compiled and built 16/16 static/dynamic routes** including `/precedents`.
+
+---
+
+## 6. Ready-to-Paste Continuation Prompt (Stage 10)
+
+```text
+You are continuing the NyayaSaar project after Stage 9 Precedent Explorer & Conflict Detector.
+
+Read first:
+- docs/stage-handoffs/stage-9.md
+- docs/implementation-status.md
+- docs/decisions.md
+- apps/api/app/agents/graph_precedent.py
+- apps/api/app/services/analysis.py
+- apps/api/app/routers/analysis.py
+
+Stages 1–9 are complete (Case Intelligence, Hybrid Legal Retrieval, Contradiction & Gap Hunter, and Precedent Explorer & Conflict Detector are all live).
+
+Implement Stage 10 — Advocate Mode & Judge/Clerk Mode:
+1. Build bounded LangGraph workflows for `workflow_type="advocate"` and `workflow_type="judge"` with deterministic verification, source-ref grounding, and HTML/Markdown report export.
+2. Replace `/advocate` and `/judge` placeholders with live case-scoped workspaces.
+3. Mandatory UI & Docs Sync (do NOT skip — no explicit user reminder should be needed):
+   - Update all stage/status labels and alerts across:
+     - `apps/web/src/app/(app)/dashboard/page.tsx` (Intelligence Modules badges & stat cards)
+     - `apps/web/src/app/(app)/cases/[id]/page.tsx` (module descriptions & `?caseId=` links)
+     - `apps/web/src/app/(app)/intelligence/intelligence-client.tsx` (top status banner)
+     - `apps/web/src/app/(app)/settings/page.tsx` (DemoNotice)
+     - `apps/web/src/components/shared/case-ui.tsx` (`ComingSoonState` if still used)
+   - Update `README.md`, `docs/implementation-status.md`, and `docs/stage-handoffs/stage-10.md`.
+4. Run full backend `pytest` (outside sandbox on Windows if `asyncio.ProactorEventLoop` `socketpair` is blocked in sandbox), `pnpm.cmd --filter web type-check`, `lint`, `test`, and `build`.
+```

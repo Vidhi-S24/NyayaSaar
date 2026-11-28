@@ -96,8 +96,8 @@ export function ComingSoonState({ feature }: { feature: string }) {
       <div>
         <p className="text-sm font-medium text-foreground">{feature}</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          This module is planned for a future stage. Stage 6 Case Intelligence
-          and Stage 7 Legal Research are available now.
+          This module is planned for Stage 10. Case Intelligence, Legal Research,
+          Contradiction &amp; Gap Hunter, and Precedent Explorer are available now.
         </p>
       </div>
     </div>

@@ -9,7 +9,7 @@ export const metadata = { title: "Advocate Mode" };
 export default function AdvocatePage() {
   return (
     <div className="flex flex-col gap-6 p-6 pb-10">
-      <DemoNotice message="Advocate Mode is planned for a future stage. Stage 6 Case Intelligence and Stage 7 Legal Research are available now. This module will develop arguments from uploaded case materials only — it does not provide legal advice." />
+      <DemoNotice message="Advocate Mode is planned for Stage 10. Case Intelligence, Legal Research, Contradiction & Gap Hunter, and Precedent Explorer are available now. This module will develop arguments from uploaded case materials only — it does not provide legal advice." />
 
       <PageHeader
         title="Advocate Mode"

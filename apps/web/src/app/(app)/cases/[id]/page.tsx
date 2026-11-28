@@ -142,10 +142,10 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
 
   const modules = [
     { href: `/intelligence?caseId=${c.id}`, label: "Case Intelligence", icon: Brain, desc: "Run source-linked analysis" },
-    { href: "/contradictions", label: "Contradiction & Gap", icon: AlertTriangle, desc: "Planned for Stage 8" },
-    { href: "/precedents", label: "Precedent Explorer", icon: BookOpen, desc: "Future stage" },
-    { href: "/advocate", label: "Advocate Mode", icon: Scale, desc: "Future stage" },
-    { href: "/judge", label: "Judge / Clerk", icon: Gavel, desc: "Future stage" },
+    { href: `/contradictions?caseId=${c.id}`, label: "Contradiction & Gap", icon: AlertTriangle, desc: "Detect conflicts and missing evidence" },
+    { href: `/precedents?caseId=${c.id}`, label: "Precedent Explorer", icon: BookOpen, desc: "Explore authorities and citation links" },
+    { href: "/advocate", label: "Advocate Mode", icon: Scale, desc: "Planned for Stage 10" },
+    { href: "/judge", label: "Judge / Clerk", icon: Gavel, desc: "Planned for Stage 10" },
   ];
 
   return (

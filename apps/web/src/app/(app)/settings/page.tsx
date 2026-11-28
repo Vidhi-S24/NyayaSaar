@@ -26,7 +26,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6 pb-10">
-      <DemoNotice message="Profile editing is not yet persisted. Authentication, cases, documents, Stage 6 Case Intelligence, and Stage 7 Legal Research are live." />
+      <DemoNotice message="Profile editing is not yet persisted. Authentication, cases, documents, Case Intelligence, Legal Research, Contradiction & Gap Hunter, and Precedent Explorer are live." />
 
       <PageHeader
         title="Settings"
